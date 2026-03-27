@@ -1,31 +1,17 @@
 import * as readline from "node:readline";
-import { getModel } from "@mariozechner/pi-ai";
-import type { Model } from "@mariozechner/pi-ai";
 import { createAgent } from "./agent.js";
+import { resolveModel } from "./provider.js";
 import chalk from "chalk";
 
-// ── Moonshot AI custom model ──────────────────────────────────────────
-// Uses OpenAI-completions API at api.moonshot.cn
-// Set MOONSHOT_API_KEY env var (from https://platform.moonshot.ai)
-const moonshotModel: Model<"openai-completions"> = {
-  id: "kimi-k2-0905-preview",
-  name: "Kimi K2 (Moonshot)",
-  api: "openai-completions",
-  provider: "moonshot",
-  baseUrl: "https://api.moonshot.ai/v1",
-  reasoning: true,
-  input: ["text"],
-  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-  contextWindow: 131_072,
-  maxTokens: 16_384,
-  compat: {
-    supportsDeveloperRole: false,
-    supportsStore: false,
-  },
-};
+import type { Api, Model } from "@mariozechner/pi-ai";
 
 // ── Banner ────────────────────────────────────────────────────────────
-function printBanner() {
+function printBanner(providerName: string, modelName: string) {
+  const label = `${modelName} · ${providerName}`;
+  // Pad to fit the box width (inner width = 36 chars)
+  const padded = label.length > 34 ? label.slice(0, 33) + "…" : label;
+  const padding = " ".repeat(36 - padded.length);
+
   console.log(chalk.cyan("  ╔══════════════════════════════════════╗"));
   console.log(
     chalk.cyan("  ║") +
@@ -33,9 +19,7 @@ function printBanner() {
       chalk.dim("v0.1.0") +
       chalk.dim("                ║"),
   );
-  console.log(
-    chalk.cyan("  ║") + chalk.dim("  Kimi K2 · Moonshot AI              ║"),
-  );
+  console.log(chalk.cyan("  ║") + chalk.dim(`  ${padded}${padding}║`));
   console.log(chalk.cyan("  ╚══════════════════════════════════════╝"));
   console.log();
   console.log(
@@ -45,8 +29,8 @@ function printBanner() {
 }
 
 // ── Print mode (single-shot) ──────────────────────────────────────────
-async function printMode(message: string) {
-  const agent = createAgent(moonshotModel);
+async function printMode(message: string, model: Model<Api>) {
+  const agent = createAgent(model);
   try {
     await agent.prompt(message);
     console.log();
@@ -57,8 +41,8 @@ async function printMode(message: string) {
 }
 
 // ── REPL ──────────────────────────────────────────────────────────────
-async function replMode() {
-  const agent = createAgent(moonshotModel);
+async function replMode(model: Model<Api>) {
+  const agent = createAgent(model);
 
   const rl = readline.createInterface({
     input: process.stdin,
@@ -111,14 +95,9 @@ async function replMode() {
 
 // ── Main ──────────────────────────────────────────────────────────────
 async function main() {
-  const apiKey = process.env.MOONSHOT_API_KEY;
-  if (!apiKey) {
-    console.error(
-      chalk.red("Error: MOONSHOT_API_KEY environment variable not set."),
-    );
-    console.error(chalk.dim("Get your key at https://platform.moonshot.ai"));
-    process.exit(1);
-  }
+  const model = resolveModel();
+
+  console.log(chalk.dim(`  Using ${model.provider}/${model.id}`));
 
   const printArg = process.argv.indexOf("--print");
   if (printArg !== -1) {
@@ -127,10 +106,10 @@ async function main() {
       console.error(chalk.red("Error: --print requires a message argument."));
       process.exit(1);
     }
-    await printMode(message);
+    await printMode(message, model);
   } else {
-    printBanner();
-    await replMode();
+    printBanner(model.provider, model.name);
+    await replMode(model);
   }
 }
 

@@ -1,5 +1,6 @@
 import { Agent } from "@mariozechner/pi-agent-core";
-import type { Model } from "@mariozechner/pi-ai";
+import { getEnvApiKey } from "@mariozechner/pi-ai";
+import type { Api, Model } from "@mariozechner/pi-ai";
 
 import { readTool } from "./tools/read.js";
 import { writeTool } from "./tools/write.js";
@@ -9,7 +10,7 @@ import { SYSTEM_PROMPT } from "./system-prompt.js";
 
 import chalk from "chalk";
 
-export function createAgent(model: Model<any>): Agent {
+export function createAgent(model: Model<Api>): Agent {
   const agent = new Agent({
     initialState: {
       systemPrompt: SYSTEM_PROMPT,
@@ -17,7 +18,18 @@ export function createAgent(model: Model<any>): Agent {
       tools: [readTool, writeTool, editTool, bashTool],
     },
     toolExecution: "sequential",
-    getApiKey: async () => process.env.MOONSHOT_API_KEY,
+    getApiKey: async () => {
+      // pi-ai's getEnvApiKey handles standard env var conventions per provider
+      // (e.g. OPENAI_API_KEY, ANTHROPIC_API_KEY, KIMI_API_KEY, etc.)
+      const key = getEnvApiKey(model.provider) ?? process.env.AI_API_KEY;
+      if (!key) {
+        throw new Error(
+          `No API key found for provider "${model.provider}".\n` +
+            `Set ${model.provider.toUpperCase().replace(/-/g, "_")}_API_KEY or AI_API_KEY env var.`,
+        );
+      }
+      return key;
+    },
   });
 
   agent.subscribe((event) => {
