@@ -7,6 +7,7 @@ import { writeTool } from "./tools/write.js";
 import { editTool } from "./tools/edit.js";
 import { bashTool } from "./tools/bash.js";
 import { SYSTEM_PROMPT } from "./system-prompt.js";
+import { createTransformContext } from "./context.js";
 
 import chalk from "chalk";
 
@@ -18,6 +19,7 @@ export function createAgent(model: Model<Api>): Agent {
       tools: [readTool, writeTool, editTool, bashTool],
     },
     toolExecution: "sequential",
+    transformContext: createTransformContext({ model }),
     getApiKey: async () => {
       // pi-ai's getEnvApiKey handles standard env var conventions per provider
       // (e.g. OPENAI_API_KEY, ANTHROPIC_API_KEY, KIMI_API_KEY, etc.)
