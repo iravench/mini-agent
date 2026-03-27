@@ -5,7 +5,9 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch src/cli.ts",
-    "start": "tsx src/cli.ts"
+    "start": "tsx src/cli.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@mariozechner/pi-ai": "^0.63.0",
