@@ -8,10 +8,14 @@ import { editTool } from "./tools/edit.js";
 import { bashTool } from "./tools/bash.js";
 import { SYSTEM_PROMPT } from "./system-prompt.js";
 import { createTransformContext } from "./context.js";
+import type { SessionManager } from "./session.js";
 
 import chalk from "chalk";
 
-export function createAgent(model: Model<Api>): Agent {
+export function createAgent(
+  model: Model<Api>,
+  session?: SessionManager,
+): Agent {
   const agent = new Agent({
     initialState: {
       systemPrompt: SYSTEM_PROMPT,
@@ -33,6 +37,14 @@ export function createAgent(model: Model<Api>): Agent {
       return key;
     },
   });
+
+  // Restore session context if resuming
+  if (session) {
+    const messages = session.buildSessionContext();
+    if (messages.length > 0) {
+      agent.replaceMessages(messages);
+    }
+  }
 
   agent.subscribe((event) => {
     switch (event.type) {
@@ -62,6 +74,11 @@ export function createAgent(model: Model<Api>): Agent {
         } else {
           process.stdout.write(chalk.dim("  ✓ done\n"));
         }
+        break;
+      }
+      case "message_end": {
+        // Persist every completed message to session
+        session?.appendMessage(event.message);
         break;
       }
       case "agent_end": {
