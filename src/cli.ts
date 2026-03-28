@@ -3,10 +3,12 @@ import { existsSync } from "node:fs";
 import { createAgent } from "./agent.js";
 import { resolveModel } from "./provider.js";
 import { SessionManager } from "./session.js";
+import { loadConfig } from "./user-config.js";
 import chalk from "chalk";
 
 import type { Api, Model } from "@mariozechner/pi-ai";
 import type { SessionManager as SessionManagerType } from "./session.js";
+import type { UserConfig } from "./user-config.js";
 
 // ── Banner ────────────────────────────────────────────────────────────
 function printBanner(providerName: string, modelName: string) {
@@ -36,8 +38,9 @@ async function printMode(
   message: string,
   model: Model<Api>,
   session?: SessionManagerType,
+  config?: UserConfig,
 ) {
-  const agent = createAgent(model, session);
+  const agent = createAgent({ model, session, config });
   try {
     await agent.prompt(message);
     console.log();
@@ -48,8 +51,12 @@ async function printMode(
 }
 
 // ── REPL ──────────────────────────────────────────────────────────────
-async function replMode(model: Model<Api>, session?: SessionManagerType) {
-  const agent = createAgent(model, session);
+async function replMode(
+  model: Model<Api>,
+  session?: SessionManagerType,
+  config?: UserConfig,
+) {
+  const agent = createAgent({ model, session, config });
 
   const rl = readline.createInterface({
     input: process.stdin,
@@ -139,7 +146,16 @@ async function main() {
     return;
   }
 
-  const model = resolveModel();
+  // Load user config
+  const config = loadConfig();
+
+  // Resolve provider/model: CLI flags > config > env vars
+  const providerFlag = getArgValue(args, "--provider");
+  const modelFlag = getArgValue(args, "--model");
+  const model = resolveModel(
+    providerFlag ?? config.defaultProvider,
+    modelFlag ?? config.defaultModel,
+  );
   const cwd = process.cwd();
 
   // Parse session flags
@@ -197,11 +213,18 @@ async function main() {
       console.error(chalk.red("Error: --print requires a message argument."));
       process.exit(1);
     }
-    await printMode(message, model, session);
+    await printMode(message, model, session, config);
   } else {
     printBanner(model.provider, model.name);
-    await replMode(model, session);
+    await replMode(model, session, config);
   }
+}
+
+/** Extract a --flag value from argv. */
+function getArgValue(args: string[], flag: string): string | undefined {
+  const idx = args.indexOf(flag);
+  if (idx === -1) return undefined;
+  return args[idx + 1];
 }
 
 main().catch((err) => {

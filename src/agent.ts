@@ -6,27 +6,49 @@ import { readTool } from "./tools/read.js";
 import { writeTool } from "./tools/write.js";
 import { editTool } from "./tools/edit.js";
 import { bashTool } from "./tools/bash.js";
-import { SYSTEM_PROMPT } from "./system-prompt.js";
+import { buildSystemPrompt } from "./system-prompt.js";
 import { createTransformContext } from "./context.js";
+import {
+  enhanceToolErrors,
+  isRetryableError,
+  abortableSleep,
+  backoffDelay,
+} from "./errors.js";
+import type { UserConfig } from "./user-config.js";
 import type { SessionManager } from "./session.js";
 
 import chalk from "chalk";
 
-export function createAgent(
-  model: Model<Api>,
-  session?: SessionManager,
-): Agent {
+export interface CreateAgentOptions {
+  model: Model<Api>;
+  session?: SessionManager;
+  config?: UserConfig;
+}
+
+export function createAgent(options: CreateAgentOptions): Agent {
+  const { model, session, config } = options;
+  const tools = [readTool, writeTool, editTool, bashTool];
+
+  let systemPrompt = buildSystemPrompt(tools);
+  if (config?.customInstructions) {
+    systemPrompt += `\n\n## User Instructions\n${config.customInstructions}`;
+  }
+
+  const retryEnabled = config?.retry?.enabled !== false;
+  const maxRetries = config?.retry?.maxRetries ?? 3;
+
   const agent = new Agent({
     initialState: {
-      systemPrompt: SYSTEM_PROMPT,
+      systemPrompt,
       model,
-      tools: [readTool, writeTool, editTool, bashTool],
+      tools,
     },
     toolExecution: "sequential",
-    transformContext: createTransformContext({ model }),
+    transformContext: createTransformContext({
+      model,
+      thresholdPercent: config?.contextThreshold,
+    }),
     getApiKey: async () => {
-      // pi-ai's getEnvApiKey handles standard env var conventions per provider
-      // (e.g. OPENAI_API_KEY, ANTHROPIC_API_KEY, KIMI_API_KEY, etc.)
       const key = getEnvApiKey(model.provider) ?? process.env.AI_API_KEY;
       if (!key) {
         throw new Error(
@@ -36,6 +58,7 @@ export function createAgent(
       }
       return key;
     },
+    afterToolCall: enhanceToolErrors,
   });
 
   // Restore session context if resuming
@@ -45,6 +68,9 @@ export function createAgent(
       agent.replaceMessages(messages);
     }
   }
+
+  // Track retry state across prompt calls
+  let retryAttempt = 0;
 
   agent.subscribe((event) => {
     switch (event.type) {
@@ -68,8 +94,10 @@ export function createAgent(
           const firstContent = event.result.content?.[0];
           const resultText =
             firstContent?.type === "text" ? firstContent.text : "error";
+          // Show first line only in terminal (hints are long)
+          const firstLine = resultText.split("\n")[0];
           process.stdout.write(
-            chalk.red(`  ✗ ${event.toolName}: ${resultText}\n`),
+            chalk.red(`  ✗ ${event.toolName}: ${firstLine}\n`),
           );
         } else {
           process.stdout.write(chalk.dim("  ✓ done\n"));
@@ -77,11 +105,38 @@ export function createAgent(
         break;
       }
       case "message_end": {
-        // Persist every completed message to session
         session?.appendMessage(event.message);
+
+        // Check for retryable API errors
+        const msg = event.message;
+        if (
+          retryEnabled &&
+          msg.role === "assistant" &&
+          msg.stopReason === "error" &&
+          msg.errorMessage &&
+          isRetryableError(msg.errorMessage)
+        ) {
+          retryAttempt++;
+          if (retryAttempt <= maxRetries) {
+            const delay = backoffDelay(retryAttempt);
+            process.stdout.write(
+              chalk.yellow(
+                `\n  ⚠ API error, retrying in ${delay / 1000}s (attempt ${retryAttempt}/${maxRetries})...\n`,
+              ),
+            );
+            abortableSleep(delay)
+              .then(() => agent.continue())
+              .catch(() => {
+                /* aborted */
+              });
+            return;
+          }
+        }
+        retryAttempt = 0;
         break;
       }
       case "agent_end": {
+        retryAttempt = 0;
         const last = event.messages.at(-1);
         if (last?.role === "assistant" && last.usage) {
           const { input, output, cost } = last.usage;
