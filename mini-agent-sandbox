@@ -1,0 +1,263 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ── mini-agent-sandbox ──────────────────────────────────────────────────────
+# Wrapper script to run mini-agent inside the AIO Sandbox Docker container.
+#
+# Usage:
+#   mini-agent-sandbox [options] [prompt]
+#
+# Options:
+#   --build              Build/rebuild the Docker image
+#   --detach             Start sandbox in background (daemon mode)
+#   --shell              Open interactive shell inside the container
+#   --repl               Run mini-agent in interactive REPL mode
+#   --stop               Stop and remove the sandbox container
+#   --port PORT          Exposed dashboard port (default: 8080)
+#   --help               Show this help
+#
+# No flags + prompt:     Single-shot agent run (--print mode)
+# No flags + no prompt:  Start container and open shell
+# ─────────────────────────────────────────────────────────────────────────────
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+IMAGE_NAME="mini-agent-sandbox"
+WORKSPACE="/workspace"
+SANDBOX_PORT=8080
+HEALTH_TIMEOUT=60
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+# Portable md5 hash (Linux: md5sum, macOS: md5 -s)
+path_hash() {
+  local path="$1"
+  if command -v md5sum &>/dev/null; then
+    echo -n "$path" | md5sum | cut -c1-8
+  elif command -v md5 &>/dev/null; then
+    md5 -s "$path" | awk '{print $NF}' | cut -c1-8
+  else
+    # Fallback: simple string hash
+    echo -n "$path" | sha256sum | cut -c1-8
+  fi
+}
+
+get_container_name() {
+  echo "mini-agent-$(path_hash "$PWD")"
+}
+
+# Build the env var flags for docker run/exec
+get_env_flags() {
+  local flags=()
+  for var in AI_API_KEY AI_PROVIDER AI_MODEL; do
+    if [[ -n "${!var:-}" ]]; then
+      flags+=(-e "$var=${!var}")
+    fi
+  done
+  echo "${flags[*]:-}"
+}
+
+# Parse env flags into array (handles empty case with set -e)
+parse_env_flags() {
+  local raw
+  raw="$(get_env_flags)"
+  if [[ -z "$raw" ]]; then
+    ENV_FLAGS=()
+  else
+    read -ra ENV_FLAGS <<< "$raw"
+  fi
+}
+
+# Check if container is running
+is_container_running() {
+  local name="$1"
+  docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$name"
+}
+
+# Wait for sandbox health endpoint
+wait_for_health() {
+  local name="$1"
+  local elapsed=0
+  printf "  Waiting for sandbox"
+  while (( elapsed < HEALTH_TIMEOUT )); do
+    if docker exec "$name" bash -c "curl -sf http://localhost:8080/v1/sandbox" &>/dev/null; then
+      echo " ready (${elapsed}s)"
+      return 0
+    fi
+    printf "."
+    sleep 1
+    elapsed=$(( elapsed + 1 ))
+  done
+  echo " timeout!"
+  return 1
+}
+
+# Ensure container is running, start if needed
+ensure_running() {
+  local name="$1"
+
+  if is_container_running "$name"; then
+    return 0
+  fi
+
+  # Check if container exists but is stopped
+  if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx "$name"; then
+    echo "  Starting stopped container..."
+    docker start "$name" >/dev/null
+  else
+    echo "  Starting new sandbox..."
+    parse_env_flags
+    docker run -d \
+      --name "$name" \
+      "${ENV_FLAGS[@]}" \
+      -v "$PWD:$WORKSPACE" \
+      -p "$SANDBOX_PORT:8080" \
+      --security-opt seccomp=unconfined \
+      --shm-size 2g \
+      "$IMAGE_NAME" >/dev/null
+  fi
+
+  wait_for_health "$name"
+}
+
+# ── Commands ─────────────────────────────────────────────────────────────────
+
+cmd_build() {
+  echo "  Building $IMAGE_NAME from $SCRIPT_DIR ..."
+  docker build -t "$IMAGE_NAME" "$SCRIPT_DIR"
+  echo "  Done."
+}
+
+cmd_stop() {
+  local name="$1"
+  if is_container_running "$name"; then
+    echo "  Stopping $name..."
+    docker stop "$name" >/dev/null
+  fi
+  if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx "$name"; then
+    echo "  Removing $name..."
+    docker rm "$name" >/dev/null
+  fi
+  echo "  Stopped."
+}
+
+cmd_detach() {
+  local name="$1"
+  if is_container_running "$name"; then
+    echo "  Already running: $name"
+  else
+    ensure_running "$name"
+  fi
+  echo ""
+  echo "  Sandbox running: $name"
+  echo "  Dashboard:  http://localhost:$SANDBOX_PORT"
+  echo "  VSCode:     http://localhost:$SANDBOX_PORT/code-server/"
+  echo "  VNC:        http://localhost:$SANDBOX_PORT/vnc/index.html?autoconnect=true"
+  echo ""
+  echo "  Run agent:  $0 \"your prompt here\""
+  echo "  REPL:       $0 --repl"
+  echo "  Shell:      $0 --shell"
+  echo "  Stop:       $0 --stop"
+}
+
+cmd_shell() {
+  local name="$1"
+  ensure_running "$name"
+  echo "  Entering shell as gem user..."
+  docker exec -it -u gem -w "$WORKSPACE" "$name" bash
+}
+
+cmd_repl() {
+  local name="$1"
+  ensure_running "$name"
+  parse_env_flags
+  echo "  Starting mini-agent REPL..."
+  docker exec -it "${ENV_FLAGS[@]}" -e NPM_CONFIG_LOGLEVEL=error -e NPM_CONFIG_UPDATE_NOTIFIER=false -u gem -w "$WORKSPACE" "$name" \
+    bash -c "npx tsx /opt/mini-agent/src/cli.ts"
+}
+
+cmd_print() {
+  local name="$1"
+  local prompt="$2"
+  ensure_running "$name"
+  parse_env_flags
+  docker exec "${ENV_FLAGS[@]}" -e NPM_CONFIG_LOGLEVEL=error -e NPM_CONFIG_UPDATE_NOTIFIER=false -u gem -w "$WORKSPACE" "$name" \
+    bash -c "npx tsx /opt/mini-agent/src/cli.ts --print '$prompt'"
+}
+
+cmd_help() {
+  echo "Usage: $(basename "$0") [options] [prompt]"
+  echo ""
+  echo "Options:"
+  echo "  --build              Build/rebuild the Docker image"
+  echo "  --detach             Start sandbox in background"
+  echo "  --shell              Open interactive shell in container"
+  echo "  --repl               Run mini-agent in REPL mode"
+  echo "  --stop               Stop and remove sandbox container"
+  echo "  --port PORT          Dashboard port (default: 8080)"
+  echo "  --help               Show this help"
+  echo ""
+  echo "No flags + prompt:     Single-shot agent (--print)"
+  echo "No flags + no prompt:  Start container + open shell"
+  echo ""
+  echo "Environment:"
+  echo "  AI_API_KEY           API key (required for agent modes)"
+  echo "  AI_PROVIDER          Provider name (optional)"
+  echo "  AI_MODEL             Model ID (optional)"
+  echo "  SANDBOX_PORT         Override default port"
+}
+
+# ── Main ─────────────────────────────────────────────────────────────────────
+
+main() {
+  local container_name
+  container_name="$(get_container_name)"
+  local command=""
+  local prompt=""
+
+  # Parse args
+  while (( $# > 0 )); do
+    case "$1" in
+      --build)    command="build"; shift ;;
+      --detach)   command="detach"; shift ;;
+      --shell)    command="shell"; shift ;;
+      --repl)     command="repl"; shift ;;
+      --stop)     command="stop"; shift ;;
+      --port)     SANDBOX_PORT="$2"; shift 2 ;;
+      --help|-h)  cmd_help; exit 0 ;;
+      --)         shift; prompt="$*"; break ;;
+      -*)         echo "Unknown option: $1"; cmd_help; exit 1 ;;
+      *)          prompt="$*"; break ;;
+    esac
+  done
+
+  # Override port from env if set
+  SANDBOX_PORT="${SANDBOX_PORT:-8080}"
+
+  # Image check (except for --build and --help)
+  if [[ "$command" != "build" && "$command" != "stop" ]]; then
+    if ! docker image inspect "$IMAGE_NAME" &>/dev/null; then
+      echo "  Image not found: $IMAGE_NAME"
+      echo "  Run: $(basename "$0") --build"
+      exit 1
+    fi
+  fi
+
+  case "${command:-}" in
+    build)   cmd_build ;;
+    detach)  cmd_detach "$container_name" ;;
+    shell)   cmd_shell "$container_name" ;;
+    repl)    cmd_repl "$container_name" ;;
+    stop)    cmd_stop "$container_name" ;;
+    "")
+      if [[ -n "$prompt" ]]; then
+        cmd_print "$container_name" "$prompt"
+      else
+        # Default: start and open shell
+        cmd_detach "$container_name"
+        cmd_shell "$container_name"
+      fi
+      ;;
+  esac
+}
+
+main "$@"
