@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Type } from "@mariozechner/pi-ai";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
+import { withFileMutationQueue } from "./file-mutation-queue.js";
 
 export const writeTool: AgentTool = {
   name: "write_file",
@@ -15,15 +16,15 @@ export const writeTool: AgentTool = {
   execute: async (_toolCallId, params) => {
     const { path, content } = params as { path: string; content: string };
 
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, content, "utf-8");
+    return withFileMutationQueue(path, async () => {
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, content, "utf-8");
 
-    const byteCount = Buffer.byteLength(content, "utf-8");
-    return {
-      content: [
-        { type: "text" as const, text: `Wrote ${byteCount} bytes to ${path}` },
-      ],
-      details: { path, bytes: byteCount },
-    };
+      const byteCount = Buffer.byteLength(content, "utf-8");
+      return {
+        content: [{ type: "text" as const, text: `Wrote ${byteCount} bytes to ${path}` }],
+        details: { path, bytes: byteCount },
+      };
+    });
   },
 };

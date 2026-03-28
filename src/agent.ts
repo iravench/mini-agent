@@ -6,14 +6,12 @@ import { readTool } from "./tools/read.js";
 import { writeTool } from "./tools/write.js";
 import { editTool } from "./tools/edit.js";
 import { bashTool } from "./tools/bash.js";
+import { grepTool } from "./tools/grep.js";
+import { findTool } from "./tools/find.js";
+import { lsTool } from "./tools/ls.js";
 import { buildSystemPrompt } from "./system-prompt.js";
 import { createTransformContext } from "./context.js";
-import {
-  enhanceToolErrors,
-  isRetryableError,
-  abortableSleep,
-  backoffDelay,
-} from "./errors.js";
+import { enhanceToolErrors, isRetryableError, abortableSleep, backoffDelay } from "./errors.js";
 import type { UserConfig } from "./user-config.js";
 import type { SessionManager } from "./session.js";
 
@@ -27,7 +25,7 @@ export interface CreateAgentOptions {
 
 export function createAgent(options: CreateAgentOptions): Agent {
   const { model, session, config } = options;
-  const tools = [readTool, writeTool, editTool, bashTool];
+  const tools = [readTool, writeTool, editTool, bashTool, grepTool, findTool, lsTool];
 
   let systemPrompt = buildSystemPrompt(tools);
   if (config?.customInstructions) {
@@ -84,21 +82,16 @@ export function createAgent(options: CreateAgentOptions): Agent {
       case "tool_execution_start": {
         const args = JSON.stringify(event.args);
         const truncated = args.length > 120 ? args.slice(0, 120) + "..." : args;
-        process.stdout.write(
-          chalk.dim(`\n  ⚡ ${event.toolName}(${truncated})\n`),
-        );
+        process.stdout.write(chalk.dim(`\n  ⚡ ${event.toolName}(${truncated})\n`));
         break;
       }
       case "tool_execution_end": {
         if (event.isError) {
           const firstContent = event.result.content?.[0];
-          const resultText =
-            firstContent?.type === "text" ? firstContent.text : "error";
+          const resultText = firstContent?.type === "text" ? firstContent.text : "error";
           // Show first line only in terminal (hints are long)
           const firstLine = resultText.split("\n")[0];
-          process.stdout.write(
-            chalk.red(`  ✗ ${event.toolName}: ${firstLine}\n`),
-          );
+          process.stdout.write(chalk.red(`  ✗ ${event.toolName}: ${firstLine}\n`));
         } else {
           process.stdout.write(chalk.dim("  ✓ done\n"));
         }
@@ -141,9 +134,7 @@ export function createAgent(options: CreateAgentOptions): Agent {
         if (last?.role === "assistant" && last.usage) {
           const { input, output, cost } = last.usage;
           process.stdout.write(
-            chalk.dim(
-              `\n  [${input} in / ${output} out / $${cost.total.toFixed(4)}]\n`,
-            ),
+            chalk.dim(`\n  [${input} in / ${output} out / $${cost.total.toFixed(4)}]\n`),
           );
         }
         break;

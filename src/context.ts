@@ -44,10 +44,7 @@ export function createTransformContext(
 
   const tokenBudget = model.contextWindow * thresholdPercent;
 
-  return async (
-    messages: AgentMessage[],
-    _signal?: AbortSignal,
-  ): Promise<AgentMessage[]> => {
+  return async (messages: AgentMessage[], _signal?: AbortSignal): Promise<AgentMessage[]> => {
     // Prefer real provider token count; fall back to heuristic on first turn
     const total = getLastInputTokens(messages) ?? estimateTokens(messages);
     if (total < tokenBudget) return messages;
@@ -62,8 +59,7 @@ export function createTransformContext(
       if (msg.role !== "toolResult") return msg;
 
       const dominated = msg.content.some(
-        (block) =>
-          block.type === "text" && block.text.length > maxToolResultChars,
+        (block) => block.type === "text" && block.text.length > maxToolResultChars,
       );
       if (!dominated) return msg;
 

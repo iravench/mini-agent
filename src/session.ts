@@ -157,9 +157,7 @@ export class SessionManager {
   /** Open a specific session file. */
   static open(path: string): SessionManager {
     const entries = loadEntriesFromFile(path);
-    const header = entries.find(
-      (e): e is SessionHeader => e.type === "session",
-    );
+    const header = entries.find((e): e is SessionHeader => e.type === "session");
     const cwd = header?.cwd ?? process.cwd();
     const dir = resolve(path, "..");
     return new SessionManager(cwd, dir, path, true);
@@ -209,9 +207,7 @@ export class SessionManager {
 
     for (const filePath of files) {
       const entries = loadEntriesFromFile(filePath);
-      const header = entries.find(
-        (e): e is SessionHeader => e.type === "session",
-      );
+      const header = entries.find((e): e is SessionHeader => e.type === "session");
       if (header && header.id.startsWith(idOrPrefix)) {
         return filePath;
       }
@@ -237,9 +233,7 @@ export class SessionManager {
         return;
       }
 
-      const header = this.fileEntries.find(
-        (e): e is SessionHeader => e.type === "session",
-      );
+      const header = this.fileEntries.find((e): e is SessionHeader => e.type === "session");
       this.sessionId = header?.id ?? randomUUID();
       this._buildIndex();
       this.flushed = true;
@@ -267,10 +261,7 @@ export class SessionManager {
 
     if (this.persist) {
       const fileTimestamp = timestamp.replace(/[:.]/g, "-");
-      this.sessionFile = join(
-        this.sessionDir,
-        `${fileTimestamp}_${this.sessionId}.jsonl`,
-      );
+      this.sessionFile = join(this.sessionDir, `${fileTimestamp}_${this.sessionId}.jsonl`);
     }
     return this.sessionFile;
   }
@@ -310,9 +301,7 @@ export class SessionManager {
 
   /** Get all session entries (excludes header). Returns a shallow copy. */
   getEntries(): SessionEntry[] {
-    return this.fileEntries.filter(
-      (e): e is SessionEntry => e.type !== "session",
-    );
+    return this.fileEntries.filter((e): e is SessionEntry => e.type !== "session");
   }
 
   /** Get entry by ID. */
@@ -374,8 +363,7 @@ export class SessionManager {
 
   private _rewriteFile(): void {
     if (!this.persist || !this.sessionFile) return;
-    const content =
-      this.fileEntries.map((e) => JSON.stringify(e)).join("\n") + "\n";
+    const content = this.fileEntries.map((e) => JSON.stringify(e)).join("\n") + "\n";
     writeFileSync(this.sessionFile, content);
   }
 

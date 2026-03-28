@@ -49,17 +49,11 @@ export function saveConfig(config: UserConfig): void {
 }
 
 /** Get effective provider name: CLI arg > config > env var. */
-export function resolveProvider(
-  cliProvider?: string,
-  config?: UserConfig,
-): string | undefined {
+export function resolveProvider(cliProvider?: string, config?: UserConfig): string | undefined {
   return cliProvider ?? config?.defaultProvider ?? process.env.AI_PROVIDER;
 }
 
 /** Get effective model ID: CLI arg > config > env var. */
-export function resolveModelId(
-  cliModel?: string,
-  config?: UserConfig,
-): string | undefined {
+export function resolveModelId(cliModel?: string, config?: UserConfig): string | undefined {
   return cliModel ?? config?.defaultModel ?? process.env.AI_MODEL;
 }

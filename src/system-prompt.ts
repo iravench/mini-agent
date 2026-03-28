@@ -8,6 +8,10 @@ const TOOL_SNIPPETS: Record<string, string> = {
   edit_file:
     "- **edit_file**: Replace one exact occurrence of old_string with new_string in a file. The match must be unique.",
   bash: "- **bash**: Run a shell command. Returns stdout, stderr, and exit code.",
+  grep: "- **grep**: Search file contents with ripgrep. Supports regex, glob filtering, context lines. Respects .gitignore.",
+  find_files:
+    "- **find_files**: Find files by glob pattern using fd. Returns paths. Respects .gitignore.",
+  ls: "- **ls**: List directory contents. Shows files and directories (with / suffix).",
 };
 
 const GUIDELINES = `
@@ -16,7 +20,8 @@ const GUIDELINES = `
 **Tool selection:**
 - Prefer edit_file over write_file when modifying existing files. Only use write_file for new files or complete rewrites.
 - Prefer read_file over bash cat for reading files — read_file gives you line numbers.
-- Use bash for: running tests, git operations, installing packages, searching (grep/find), directory listing.
+- Use grep to search file contents, find_files to locate files by name, ls to explore directories.
+- Use bash for: running tests, git operations, installing packages, compiling code.
 
 **Workflow:**
 - Read before you edit. Understand the code before making changes.

@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { Type } from "@mariozechner/pi-ai";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
+import { withFileMutationQueue } from "./file-mutation-queue.js";
 
 export const editTool: AgentTool = {
   name: "edit_file",
@@ -21,34 +22,36 @@ export const editTool: AgentTool = {
       new_string: string;
     };
 
-    const content = await readFile(path, "utf-8").catch(() => {
-      throw new Error(`File not found: ${path}`);
+    return withFileMutationQueue(path, async () => {
+      const content = await readFile(path, "utf-8").catch(() => {
+        throw new Error(`File not found: ${path}`);
+      });
+
+      const occurrences = content.split(old_string).length - 1;
+      if (occurrences === 0) {
+        throw new Error(`String not found in ${path}`);
+      }
+      if (occurrences > 1) {
+        throw new Error(
+          `String found ${occurrences} times in ${path}. Provide more context to make the match unique.`,
+        );
+      }
+
+      const updated = content.replace(old_string, new_string);
+      await writeFile(path, updated, "utf-8");
+
+      const oldLines = old_string.split("\n").length;
+      const newLines = new_string.split("\n").length;
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Replaced 1 occurrence in ${path} (${oldLines} lines → ${newLines} lines)`,
+          },
+        ],
+        details: { path, oldLines, newLines },
+      };
     });
-
-    const occurrences = content.split(old_string).length - 1;
-    if (occurrences === 0) {
-      throw new Error(`String not found in ${path}`);
-    }
-    if (occurrences > 1) {
-      throw new Error(
-        `String found ${occurrences} times in ${path}. Provide more context to make the match unique.`,
-      );
-    }
-
-    const updated = content.replace(old_string, new_string);
-    await writeFile(path, updated, "utf-8");
-
-    const oldLines = old_string.split("\n").length;
-    const newLines = new_string.split("\n").length;
-
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: `Replaced 1 occurrence in ${path} (${oldLines} lines → ${newLines} lines)`,
-        },
-      ],
-      details: { path, oldLines, newLines },
-    };
   },
 };

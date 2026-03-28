@@ -25,10 +25,7 @@ const CUSTOM_MODELS: Record<string, Model<any>> = {
 
 // ── Provider/model resolution ──────────────────────────────────────────
 
-export function resolveModel(
-  providerName?: string,
-  modelId?: string,
-): Model<Api> {
+export function resolveModel(providerName?: string, modelId?: string): Model<Api> {
   const provider = providerName ?? process.env.AI_PROVIDER;
   const model = modelId ?? process.env.AI_MODEL;
 

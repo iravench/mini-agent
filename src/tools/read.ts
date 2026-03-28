@@ -8,13 +8,10 @@ const MAX_BYTES = 51_200;
 export const readTool: AgentTool = {
   name: "read_file",
   label: "Read File",
-  description:
-    "Read the contents of a file. Returns lines with line number prefixes.",
+  description: "Read the contents of a file. Returns lines with line number prefixes.",
   parameters: Type.Object({
     path: Type.String({ description: "File path to read" }),
-    offset: Type.Optional(
-      Type.Number({ description: "Start line number (1-indexed, default 1)" }),
-    ),
+    offset: Type.Optional(Type.Number({ description: "Start line number (1-indexed, default 1)" })),
     limit: Type.Optional(
       Type.Number({
         description: `Max lines to return (default 200, max ${MAX_LINES})`,
@@ -36,9 +33,7 @@ export const readTool: AgentTool = {
     if (!s) throw new Error(`File not found: ${path}`);
     if (!s.isFile()) throw new Error(`Not a file: ${path}`);
     if (s.size > MAX_BYTES) {
-      throw new Error(
-        `File too large (${s.size} bytes). Use offset/limit to read in chunks.`,
-      );
+      throw new Error(`File too large (${s.size} bytes). Use offset/limit to read in chunks.`);
     }
 
     const content = await readFile(path, "utf-8");

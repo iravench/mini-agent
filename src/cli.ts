@@ -27,9 +27,7 @@ function printBanner(providerName: string, modelName: string) {
   console.log(chalk.cyan("  ║") + chalk.dim(`  ${padded}${padding}║`));
   console.log(chalk.cyan("  ╚══════════════════════════════════════╝"));
   console.log();
-  console.log(
-    chalk.dim("  Type your message. Ctrl+C to abort. Ctrl+C twice to exit."),
-  );
+  console.log(chalk.dim("  Type your message. Ctrl+C to abort. Ctrl+C twice to exit."));
   console.log();
 }
 
@@ -51,11 +49,7 @@ async function printMode(
 }
 
 // ── REPL ──────────────────────────────────────────────────────────────
-async function replMode(
-  model: Model<Api>,
-  session?: SessionManagerType,
-  config?: UserConfig,
-) {
+async function replMode(model: Model<Api>, session?: SessionManagerType, config?: UserConfig) {
   const agent = createAgent({ model, session, config });
 
   const rl = readline.createInterface({
@@ -121,18 +115,11 @@ function printSessions(cwd: string) {
     const modified = chalk.dim(
       s.modified.toLocaleDateString() + " " + s.modified.toLocaleTimeString(),
     );
-    const preview =
-      s.firstMessage.length > 60
-        ? s.firstMessage.slice(0, 57) + "…"
-        : s.firstMessage;
+    const preview = s.firstMessage.length > 60 ? s.firstMessage.slice(0, 57) + "…" : s.firstMessage;
     console.log(`  ${id}  ${msgs}  ${modified}  ${preview}`);
   }
   console.log();
-  console.log(
-    chalk.dim(
-      `  Use --session <id> to resume by ID, or --session <path> for a file.`,
-    ),
-  );
+  console.log(chalk.dim(`  Use --session <id> to resume by ID, or --session <path> for a file.`));
   console.log();
 }
 
@@ -168,15 +155,11 @@ async function main() {
     session = SessionManager.continueRecent(cwd);
     const entries = session.getEntries();
     const sessionId = session.getSessionId().slice(0, 8);
-    console.log(
-      chalk.dim(`  Resumed session ${sessionId} (${entries.length} entries)`),
-    );
+    console.log(chalk.dim(`  Resumed session ${sessionId} (${entries.length} entries)`));
   } else if (sessionIdx !== -1) {
     const sessionArg = args[sessionIdx + 1];
     if (!sessionArg) {
-      console.error(
-        chalk.red("Error: --session requires a session ID or file path."),
-      );
+      console.error(chalk.red("Error: --session requires a session ID or file path."));
       process.exit(1);
     }
     // Resolve: try as file path first, then as session ID prefix
@@ -197,9 +180,7 @@ async function main() {
     session = SessionManager.open(sessionPath);
     const entries = session.getEntries();
     const sessionId = session.getSessionId().slice(0, 8);
-    console.log(
-      chalk.dim(`  Opened session ${sessionId} (${entries.length} entries)`),
-    );
+    console.log(chalk.dim(`  Opened session ${sessionId} (${entries.length} entries)`));
   } else {
     session = SessionManager.create(cwd);
   }
