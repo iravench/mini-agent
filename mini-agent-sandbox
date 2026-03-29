@@ -135,7 +135,7 @@ stop_proxy() {
 
 # Detect Docker bridge gateway IP for host.docker.internal
 get_gateway_ip() {
-  docker network inspect bridge --format '{{.IPAM.Config[0].Gateway}}' 2>/dev/null || echo ""
+  docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}' 2>/dev/null || echo ""
 }
 
 # Check if container is running
@@ -191,11 +191,11 @@ ensure_running() {
 
     docker run -d \
       --name "$name" \
+      --runtime=runsc \
       "${SECRETS_MOUNT[@]}" \
       "${add_host[@]}" \
       -v "$PWD:$WORKSPACE" \
       -p "$SANDBOX_PORT:8080" \
-      --security-opt seccomp=unconfined \
       --shm-size 2g \
       "$IMAGE_NAME" >/dev/null
 
@@ -259,14 +259,14 @@ cmd_shell() {
   local name="$1"
   ensure_running "$name"
   echo "  Entering shell as gem user..."
-  docker exec -it -u gem -w "$WORKSPACE" "$name" bash
+  docker exec -it -u 1000:1000 -w "$WORKSPACE" "$name" bash
 }
 
 cmd_repl() {
   local name="$1"
   ensure_running "$name"
   echo "  Starting mini-agent REPL..."
-  docker exec -it -u gem -w "$WORKSPACE" "$name" \
+  docker exec -it -u 1000:1000 -w "$WORKSPACE" "$name" \
     bun /opt/mini-agent/src/cli.ts
 }
 
@@ -274,7 +274,7 @@ cmd_print() {
   local name="$1"
   local prompt="$2"
   ensure_running "$name"
-  docker exec -u gem -w "$WORKSPACE" "$name" \
+  docker exec -u 1000:1000 -w "$WORKSPACE" "$name" \
     bun /opt/mini-agent/src/cli.ts --print "$prompt"
 }
 

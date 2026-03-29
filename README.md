@@ -80,7 +80,14 @@ Run mini-agent inside [AIO Sandbox](https://github.com/agent-infra/sandbox) for 
 ./mini-agent-sandbox --port 8081 --proxy-port 9822 --detach
 ```
 
-Requires Docker. Add to `~/.zshrc` for shorthand from any directory:
+Requires Docker + [gVisor](https://gvisor.dev/) (`runsc`) for kernel-level sandbox isolation:
+
+```bash
+# Install gVisor (one-time)
+sudo runsc install && sudo systemctl restart docker
+```
+
+Add to `~/.zshrc` for shorthand from any directory:
 
 ```bash
 ma() { /path/to/mini-agent-sandbox "$@" }
