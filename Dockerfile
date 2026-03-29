@@ -6,13 +6,15 @@ RUN apt-get update \
     && ln -sf "$(which fdfind)" /usr/local/bin/fd \
     && rm -rf /var/lib/apt/lists/*
 
-# tsx: TypeScript execution engine (no build step needed)
-RUN npm i -g tsx
+# Bun: native TypeScript execution (replaces tsx)
+RUN curl -fsSL https://bun.sh/install | bash \
+    && cp /root/.bun/bin/bun /usr/local/bin/bun \
+    && ln -sf /usr/local/bin/bun /usr/local/bin/bunx
 
 # Install mini-agent production dependencies (cached layer)
 WORKDIR /opt/mini-agent
 COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev
+RUN bun install --production --frozen-lockfile 2>/dev/null || bun install --production
 
 # Copy source code
 COPY src/ src/

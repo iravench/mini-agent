@@ -172,7 +172,7 @@ cmd_repl() {
   parse_env_flags
   echo "  Starting mini-agent REPL..."
   docker exec -it "${ENV_FLAGS[@]}" -e NPM_CONFIG_LOGLEVEL=error -e NPM_CONFIG_UPDATE_NOTIFIER=false -u gem -w "$WORKSPACE" "$name" \
-    bash -c "npx tsx /opt/mini-agent/src/cli.ts"
+    bun /opt/mini-agent/src/cli.ts
 }
 
 cmd_print() {
@@ -181,7 +181,7 @@ cmd_print() {
   ensure_running "$name"
   parse_env_flags
   docker exec "${ENV_FLAGS[@]}" -e NPM_CONFIG_LOGLEVEL=error -e NPM_CONFIG_UPDATE_NOTIFIER=false -u gem -w "$WORKSPACE" "$name" \
-    bash -c "npx tsx /opt/mini-agent/src/cli.ts --print '$prompt'"
+    bun /opt/mini-agent/src/cli.ts --print "$prompt"
 }
 
 cmd_help() {
