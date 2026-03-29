@@ -10,14 +10,19 @@ jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
 
       - run: npm ci
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y ripgrep fd-find
+          sudo ln -sf $(which fdfind) /usr/local/bin/fd
 
       - name: Typecheck
         run: npm run typecheck
