@@ -62,4 +62,35 @@ describe("user-config", () => {
     // Should have trailing newline
     expect(raw.endsWith("\n")).toBe(true);
   });
+
+  it("rejects out-of-range contextThreshold", () => {
+    const configPath = join(tmpDir, "config.json");
+    writeFileSync(configPath, JSON.stringify({ contextThreshold: 5.0 }));
+    const config = loadConfig();
+    // Zod rejects — entire config falls back to empty
+    expect(config).toEqual({});
+  });
+
+  it("rejects wrong types", () => {
+    const configPath = join(tmpDir, "config.json");
+    writeFileSync(configPath, JSON.stringify({ defaultProvider: 42 }));
+    const config = loadConfig();
+    expect(config).toEqual({});
+  });
+
+  it("loads valid retry config", () => {
+    const cfg: UserConfig = {
+      retry: { enabled: true, maxRetries: 5, baseDelayMs: 1000 },
+    };
+    saveConfig(cfg);
+    const loaded = loadConfig();
+    expect(loaded.retry).toEqual({ enabled: true, maxRetries: 5, baseDelayMs: 1000 });
+  });
+
+  it("rejects invalid retry.maxRetries", () => {
+    const configPath = join(tmpDir, "config.json");
+    writeFileSync(configPath, JSON.stringify({ retry: { maxRetries: -1 } }));
+    const config = loadConfig();
+    expect(config).toEqual({});
+  });
 });

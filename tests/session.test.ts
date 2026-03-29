@@ -101,7 +101,7 @@ describe("SessionManager", () => {
     expect(context).toHaveLength(0);
   });
 
-  it("persists and loads session from file", () => {
+  it("persists and loads session from file", async () => {
     const session = SessionManager.create("/test/project");
     session.appendMessage(userMsg("persisted message"));
     session.appendMessage(assistantMsg("persisted response"));
@@ -110,14 +110,14 @@ describe("SessionManager", () => {
     expect(filePath).toBeTruthy();
 
     // Open from file
-    const loaded = SessionManager.open(filePath!);
+    const loaded = await SessionManager.open(filePath!);
     const context = loaded.buildSessionContext();
     expect(context).toHaveLength(2);
     expect(msgText(context[0])).toBe("persisted message");
     expect(msgText(context[1])).toBe("persisted response");
   });
 
-  it("lists sessions for a cwd", () => {
+  it("lists sessions for a cwd", async () => {
     // Session with assistant message persists (deferred flush triggers)
     const s1 = SessionManager.create("/test/project");
     s1.appendMessage(userMsg("session 1 msg"));
@@ -127,13 +127,13 @@ describe("SessionManager", () => {
     s2.appendMessage(userMsg("session 2 msg"));
     s2.appendMessage(assistantMsg("session 2 response"));
 
-    const sessions = SessionManager.list("/test/project");
+    const sessions = await SessionManager.list("/test/project");
     expect(sessions.length).toBe(2);
     // Newest first
     expect(sessions[0].modified.getTime()).toBeGreaterThanOrEqual(sessions[1].modified.getTime());
   });
 
-  it("finds session by ID prefix", () => {
+  it("finds session by ID prefix", async () => {
     const session = SessionManager.create("/test/project");
     session.appendMessage(userMsg("msg"));
     session.appendMessage(assistantMsg("response"));
@@ -141,16 +141,16 @@ describe("SessionManager", () => {
     const fullId = session.getSessionId();
     const prefix = fullId.slice(0, 4);
 
-    const found = SessionManager.findById(prefix, "/test/project");
+    const found = await SessionManager.findById(prefix, "/test/project");
     expect(found).toBeTruthy();
   });
 
-  it("returns null for non-existent ID", () => {
-    const found = SessionManager.findById("nonexistent", "/test/project");
+  it("returns null for non-existent ID", async () => {
+    const found = await SessionManager.findById("nonexistent", "/test/project");
     expect(found).toBeNull();
   });
 
-  it("handles corrupted session file gracefully", () => {
+  it("handles corrupted session file gracefully", async () => {
     const session = SessionManager.create("/test/project");
     session.appendMessage(userMsg("ok"));
     session.appendMessage(assistantMsg("ok"));
@@ -159,7 +159,7 @@ describe("SessionManager", () => {
     const filePath = session.getSessionFile();
     writeFileSync(filePath!, "not valid jsonl\n");
 
-    const loaded = SessionManager.open(filePath!);
+    const loaded = await SessionManager.open(filePath!);
     // Should not throw, should have empty context
     expect(loaded.buildSessionContext()).toHaveLength(0);
   });

@@ -1,4 +1,5 @@
 import * as readline from "node:readline";
+import { createRequire } from "node:module";
 import { existsSync } from "node:fs";
 import { createAgent } from "./agent.js";
 import { resolveModel } from "./provider.js";
@@ -10,19 +11,25 @@ import type { Api, Model } from "@mariozechner/pi-ai";
 import type { SessionManager as SessionManagerType } from "./session.js";
 import type { UserConfig } from "./user-config.js";
 
+// ── Version ───────────────────────────────────────────────────────────
+const require = createRequire(import.meta.url);
+const VERSION: string = require("../package.json").version;
+
 // ── Banner ────────────────────────────────────────────────────────────
 function printBanner(providerName: string, modelName: string) {
   const label = `${modelName} · ${providerName}`;
   // Pad to fit the box width (inner width = 36 chars)
   const padded = label.length > 34 ? label.slice(0, 33) + "…" : label;
   const padding = " ".repeat(36 - padded.length);
+  const versionStr = `v${VERSION}`;
+  const versionPad = " ".repeat(Math.max(0, 36 - 12 - versionStr.length));
 
   console.log(chalk.cyan("  ╔══════════════════════════════════════╗"));
   console.log(
     chalk.cyan("  ║") +
       chalk.bold("  mini-agent  ") +
-      chalk.dim("v0.1.0") +
-      chalk.dim("                ║"),
+      chalk.dim(versionStr) +
+      chalk.dim(`${versionPad}║`),
   );
   console.log(chalk.cyan("  ║") + chalk.dim(`  ${padded}${padding}║`));
   console.log(chalk.cyan("  ╚══════════════════════════════════════╝"));
@@ -102,8 +109,8 @@ async function replMode(model: Model<Api>, session?: SessionManagerType, config?
 }
 
 // ── List sessions ─────────────────────────────────────────────────────
-function printSessions(cwd: string) {
-  const sessions = SessionManager.list(cwd);
+async function printSessions(cwd: string) {
+  const sessions = await SessionManager.list(cwd);
   if (sessions.length === 0) {
     console.log(chalk.dim("  No sessions found."));
     return;
@@ -129,7 +136,7 @@ async function main() {
 
   // --list doesn't need a model
   if (args.includes("--list")) {
-    printSessions(process.cwd());
+    await printSessions(process.cwd());
     return;
   }
 
@@ -152,7 +159,7 @@ async function main() {
   const sessionIdx = args.indexOf("--session");
 
   if (continueIdx !== -1) {
-    session = SessionManager.continueRecent(cwd);
+    session = await SessionManager.continueRecent(cwd);
     const entries = session.getEntries();
     const sessionId = session.getSessionId().slice(0, 8);
     console.log(chalk.dim(`  Resumed session ${sessionId} (${entries.length} entries)`));
@@ -167,7 +174,7 @@ async function main() {
     if (existsSync(sessionArg)) {
       sessionPath = sessionArg;
     } else {
-      const found = SessionManager.findById(sessionArg, cwd);
+      const found = await SessionManager.findById(sessionArg, cwd);
       if (!found) {
         console.error(
           chalk.red(`Error: No session found matching "${sessionArg}".`) +
@@ -177,7 +184,7 @@ async function main() {
       }
       sessionPath = found;
     }
-    session = SessionManager.open(sessionPath);
+    session = await SessionManager.open(sessionPath);
     const entries = session.getEntries();
     const sessionId = session.getSessionId().slice(0, 8);
     console.log(chalk.dim(`  Opened session ${sessionId} (${entries.length} entries)`));

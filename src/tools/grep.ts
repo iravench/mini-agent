@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { Type } from "@mariozechner/pi-ai";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
+import { truncateBytes } from "./_truncate.js";
 
 const DEFAULT_LIMIT = 100;
 const MAX_BYTES = 51_200;
@@ -11,20 +12,6 @@ const MAX_LINE_LENGTH = 500;
 function truncateLine(text: string): { text: string; wasTruncated: boolean } {
   if (text.length <= MAX_LINE_LENGTH) return { text, wasTruncated: false };
   return { text: text.slice(0, MAX_LINE_LENGTH) + "...", wasTruncated: true };
-}
-
-function truncateBytes(text: string, max: number): { content: string; truncated: boolean } {
-  const bytes = Buffer.byteLength(text, "utf-8");
-  if (bytes <= max) return { content: text, truncated: false };
-  // Rough char-based truncation, then re-check
-  let slice = text.slice(0, max);
-  while (Buffer.byteLength(slice, "utf-8") > max && slice.length > 0) {
-    slice = slice.slice(0, -100);
-  }
-  return {
-    content: slice + "\n\n[Output truncated. Use a more specific pattern or reduce limit.]",
-    truncated: true,
-  };
 }
 
 export const grepTool: AgentTool = {

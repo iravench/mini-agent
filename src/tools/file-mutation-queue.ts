@@ -1,6 +1,14 @@
 import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
 
+/**
+ * Map of per-file mutation queues. Each key is a resolved file path; the value
+ * is a promise chain that serializes concurrent writes to that file.
+ *
+ * Lifecycle: entries are inserted when an operation starts and removed once the
+ * operation completes (and no successor is queued). Resolved promises are not
+ * retained — the Map only grows while operations are actively in-flight.
+ */
 const fileMutationQueues = new Map<string, Promise<void>>();
 
 function getMutationQueueKey(filePath: string): string {

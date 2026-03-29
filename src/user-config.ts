@@ -1,23 +1,25 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { z } from "zod";
 import { getAgentDir } from "./config.js";
 
-export interface UserConfig {
-  /** Default provider name (e.g. "openai", "anthropic", "moonshot") */
-  defaultProvider?: string;
-  /** Default model ID (e.g. "gpt-4o", "claude-sonnet-4-20250514") */
-  defaultModel?: string;
-  /** Context window threshold (0-1). Fraction of context window to use before pruning. Default: 0.8 */
-  contextThreshold?: number;
-  /** Custom system prompt appended to the default prompt */
-  customInstructions?: string;
-  /** Retry settings for transient API errors */
-  retry?: {
-    enabled?: boolean;
-    maxRetries?: number;
-    baseDelayMs?: number;
-  };
-}
+const configSchema = z
+  .object({
+    defaultProvider: z.string().optional(),
+    defaultModel: z.string().optional(),
+    contextThreshold: z.number().min(0.1).max(1.0).optional(),
+    customInstructions: z.string().optional(),
+    retry: z
+      .object({
+        enabled: z.boolean().optional(),
+        maxRetries: z.number().int().min(0).max(10).optional(),
+        baseDelayMs: z.number().int().min(100).optional(),
+      })
+      .optional(),
+  })
+  .passthrough();
+
+export type UserConfig = z.infer<typeof configSchema>;
 
 const CONFIG_FILE = "config.json";
 
@@ -32,9 +34,9 @@ export function loadConfig(): UserConfig {
 
   try {
     const raw = readFileSync(path, "utf-8");
-    const parsed = JSON.parse(raw);
-    if (typeof parsed !== "object" || parsed === null) return {};
-    return parsed as UserConfig;
+    const parsed: unknown = JSON.parse(raw);
+    const result = configSchema.safeParse(parsed);
+    return result.success ? result.data : {};
   } catch {
     return {};
   }

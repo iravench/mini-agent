@@ -1,14 +1,7 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import { randomUUID } from "node:crypto";
-import {
-  appendFileSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { getSessionDir } from "./config.js";
 
@@ -53,30 +46,19 @@ function generateId(byId: { has(id: string): boolean }): string {
   return randomUUID();
 }
 
-/** Parse a JSONL file into entries. Skips malformed lines. */
+/** Parse a JSONL file into entries. Logs malformed lines to stderr. */
 function parseEntries(content: string): FileEntry[] {
   const entries: FileEntry[] = [];
-  for (const line of content.trim().split("\n")) {
+  for (let i = 0; i < content.trim().split("\n").length; i++) {
+    const line = content.trim().split("\n")[i];
     if (!line.trim()) continue;
     try {
       entries.push(JSON.parse(line) as FileEntry);
     } catch {
-      // skip malformed lines
+      process.stderr.write(`[session] skipping malformed line ${i + 1}: ${line.slice(0, 80)}\n`);
     }
   }
   return entries;
-}
-
-function isSessionFile(filePath: string): boolean {
-  try {
-    const content = readFileSync(filePath, "utf-8");
-    const firstLine = content.trim().split("\n")[0];
-    if (!firstLine) return false;
-    const header = JSON.parse(firstLine);
-    return header.type === "session" && typeof header.id === "string";
-  } catch {
-    return false;
-  }
 }
 
 function extractText(message: AgentMessage): string {
@@ -89,15 +71,83 @@ function extractText(message: AgentMessage): string {
     .join(" ");
 }
 
-function findMostRecentSession(sessionDir: string): string | null {
+async function isSessionFileAsync(filePath: string): Promise<boolean> {
   try {
-    const files = readdirSync(sessionDir)
-      .filter((f) => f.endsWith(".jsonl"))
-      .map((f) => join(sessionDir, f))
-      .filter(isSessionFile)
-      .map((path) => ({ path, mtime: statSync(path).mtime }))
-      .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
-    return files[0]?.path ?? null;
+    const content = await readFile(filePath, "utf-8");
+    const firstLine = content.trim().split("\n")[0];
+    if (!firstLine) return false;
+    const header = JSON.parse(firstLine);
+    return header.type === "session" && typeof header.id === "string";
+  } catch {
+    return false;
+  }
+}
+
+async function loadEntriesFromFileAsync(filePath: string): Promise<FileEntry[]> {
+  try {
+    await stat(filePath);
+  } catch {
+    return [];
+  }
+  const content = await readFile(filePath, "utf-8");
+  const entries = parseEntries(content);
+
+  if (entries.length === 0) return entries;
+  const header = entries[0];
+  if (header.type !== "session" || typeof (header as any).id !== "string") {
+    return [];
+  }
+  return entries;
+}
+
+async function buildSessionInfoAsync(filePath: string): Promise<SessionInfo | null> {
+  try {
+    const entries = await loadEntriesFromFileAsync(filePath);
+    if (entries.length === 0) return null;
+    const header = entries[0];
+    if (header.type !== "session") return null;
+
+    const fileStat = await stat(filePath);
+    let messageCount = 0;
+    let firstMessage = "";
+
+    for (const entry of entries) {
+      if (entry.type !== "message") continue;
+      messageCount++;
+      if (!firstMessage && (entry.message as any).role === "user") {
+        firstMessage = extractText(entry.message);
+      }
+    }
+
+    const sessionHeader = header as SessionHeader;
+    return {
+      path: filePath,
+      id: sessionHeader.id,
+      cwd: sessionHeader.cwd,
+      created: new Date(sessionHeader.timestamp),
+      modified: fileStat.mtime,
+      messageCount,
+      firstMessage: firstMessage || "(no messages)",
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function findMostRecentSessionAsync(sessionDir: string): Promise<string | null> {
+  try {
+    const files = await readdir(sessionDir);
+    const jsonlFiles = files.filter((f) => f.endsWith(".jsonl")).map((f) => join(sessionDir, f));
+
+    const valid: { path: string; mtime: Date }[] = [];
+    for (const f of jsonlFiles) {
+      if (await isSessionFileAsync(f)) {
+        const s = await stat(f);
+        valid.push({ path: f, mtime: s.mtime });
+      }
+    }
+    valid.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
+    return valid[0]?.path ?? null;
   } catch {
     return null;
   }
@@ -155,8 +205,8 @@ export class SessionManager {
   }
 
   /** Open a specific session file. */
-  static open(path: string): SessionManager {
-    const entries = loadEntriesFromFile(path);
+  static async open(path: string): Promise<SessionManager> {
+    const entries = await loadEntriesFromFileAsync(path);
     const header = entries.find((e): e is SessionHeader => e.type === "session");
     const cwd = header?.cwd ?? process.cwd();
     const dir = resolve(path, "..");
@@ -164,9 +214,9 @@ export class SessionManager {
   }
 
   /** Continue the most recent session for the given cwd, or create new. */
-  static continueRecent(cwd: string): SessionManager {
+  static async continueRecent(cwd: string): Promise<SessionManager> {
     const dir = getSessionDir(cwd);
-    const mostRecent = findMostRecentSession(dir);
+    const mostRecent = await findMostRecentSessionAsync(dir);
     if (mostRecent) {
       return new SessionManager(cwd, dir, mostRecent, true);
     }
@@ -174,18 +224,16 @@ export class SessionManager {
   }
 
   /** List all sessions for a given cwd, newest first. */
-  static list(cwd: string): SessionInfo[] {
+  static async list(cwd: string): Promise<SessionInfo[]> {
     const dir = getSessionDir(cwd);
     const sessions: SessionInfo[] = [];
     if (!existsSync(dir)) return sessions;
 
-    const files = readdirSync(dir)
-      .filter((f) => f.endsWith(".jsonl"))
-      .map((f) => join(dir, f))
-      .filter(isSessionFile);
+    const files = (await readdir(dir)).filter((f) => f.endsWith(".jsonl")).map((f) => join(dir, f));
 
     for (const filePath of files) {
-      const info = buildSessionInfo(filePath);
+      if (!(await isSessionFileAsync(filePath))) continue;
+      const info = await buildSessionInfoAsync(filePath);
       if (info) sessions.push(info);
     }
 
@@ -197,16 +245,14 @@ export class SessionManager {
    * Find a session file by full or partial ID (prefix match).
    * Returns the file path, or null if not found.
    */
-  static findById(idOrPrefix: string, cwd: string): string | null {
+  static async findById(idOrPrefix: string, cwd: string): Promise<string | null> {
     const dir = getSessionDir(cwd);
     if (!existsSync(dir)) return null;
 
-    const files = readdirSync(dir)
-      .filter((f) => f.endsWith(".jsonl"))
-      .map((f) => join(dir, f));
+    const files = (await readdir(dir)).filter((f) => f.endsWith(".jsonl")).map((f) => join(dir, f));
 
     for (const filePath of files) {
-      const entries = loadEntriesFromFile(filePath);
+      const entries = await loadEntriesFromFileAsync(filePath);
       const header = entries.find((e): e is SessionHeader => e.type === "session");
       if (header && header.id.startsWith(idOrPrefix)) {
         return filePath;
@@ -415,39 +461,4 @@ export function loadEntriesFromFile(filePath: string): FileEntry[] {
     return [];
   }
   return entries;
-}
-
-/** Build session info for listing. */
-function buildSessionInfo(filePath: string): SessionInfo | null {
-  try {
-    const entries = loadEntriesFromFile(filePath);
-    if (entries.length === 0) return null;
-    const header = entries[0];
-    if (header.type !== "session") return null;
-
-    const stats = statSync(filePath);
-    let messageCount = 0;
-    let firstMessage = "";
-
-    for (const entry of entries) {
-      if (entry.type !== "message") continue;
-      messageCount++;
-      if (!firstMessage && (entry.message as any).role === "user") {
-        firstMessage = extractText(entry.message);
-      }
-    }
-
-    const sessionHeader = header as SessionHeader;
-    return {
-      path: filePath,
-      id: sessionHeader.id,
-      cwd: sessionHeader.cwd,
-      created: new Date(sessionHeader.timestamp),
-      modified: stats.mtime,
-      messageCount,
-      firstMessage: firstMessage || "(no messages)",
-    };
-  } catch {
-    return null;
-  }
 }

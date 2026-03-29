@@ -1,22 +1,10 @@
 import { spawnSync } from "node:child_process";
 import { Type } from "@mariozechner/pi-ai";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
+import { truncateBytes } from "./_truncate.js";
 
 const DEFAULT_LIMIT = 1000;
 const MAX_BYTES = 51_200;
-
-function truncateBytes(text: string, max: number): { content: string; truncated: boolean } {
-  const bytes = Buffer.byteLength(text, "utf-8");
-  if (bytes <= max) return { content: text, truncated: false };
-  let slice = text.slice(0, max);
-  while (Buffer.byteLength(slice, "utf-8") > max && slice.length > 0) {
-    slice = slice.slice(0, -100);
-  }
-  return {
-    content: slice + "\n\n[Output truncated. Use a more specific pattern or reduce limit.]",
-    truncated: true,
-  };
-}
 
 export const findTool: AgentTool = {
   name: "find_files",
@@ -89,11 +77,9 @@ export const findTool: AgentTool = {
       );
     }
 
-    let text = output;
-    const { content, truncated } = truncateBytes(text, MAX_BYTES);
+    const { content, truncated } = truncateBytes(output, MAX_BYTES);
     if (truncated) notices.push(`${MAX_BYTES / 1024}KB output limit reached`);
-    if (notices.length > 0) text = content + `\n\n[${notices.join(". ")}]`;
-    else text = content;
+    const text = notices.length > 0 ? content + `\n\n[${notices.join(". ")}]` : content;
 
     return { content: [{ type: "text" as const, text }], details: undefined };
   },
