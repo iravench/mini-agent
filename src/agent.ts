@@ -12,6 +12,7 @@ import { lsTool } from "./tools/ls.js";
 import { buildSystemPrompt } from "./system-prompt.js";
 import { createTransformContext } from "./context.js";
 import { enhanceToolErrors, isRetryableError, abortableSleep, backoffDelay } from "./errors.js";
+import { env } from "./secrets.js";
 import type { UserConfig } from "./user-config.js";
 import type { SessionManager } from "./session.js";
 
@@ -47,7 +48,7 @@ export function createAgent(options: CreateAgentOptions): Agent {
       thresholdPercent: config?.contextThreshold,
     }),
     getApiKey: async () => {
-      const key = getEnvApiKey(model.provider) ?? process.env.AI_API_KEY;
+      const key = getEnvApiKey(model.provider) ?? env("AI_API_KEY");
       if (!key) {
         throw new Error(
           `No API key found for provider "${model.provider}".\n` +

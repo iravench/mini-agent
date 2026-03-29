@@ -1,5 +1,6 @@
 import { getModels, getProviders } from "@mariozechner/pi-ai";
 import type { Api, KnownProvider, Model } from "@mariozechner/pi-ai";
+import { env } from "./secrets.js";
 
 // ── Custom model definitions for providers not in the built-in registry ──
 // Extend this map to add OpenAI-compatible providers that pi-ai doesn't ship.
@@ -26,8 +27,8 @@ const CUSTOM_MODELS: Record<string, Model<any>> = {
 // ── Provider/model resolution ──────────────────────────────────────────
 
 export function resolveModel(providerName?: string, modelId?: string): Model<Api> {
-  const provider = providerName ?? process.env.AI_PROVIDER;
-  const model = modelId ?? process.env.AI_MODEL;
+  const provider = providerName ?? env("AI_PROVIDER");
+  const model = modelId ?? env("AI_MODEL");
 
   if (!provider) {
     throw new Error(

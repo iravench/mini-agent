@@ -45,25 +45,37 @@ get_container_name() {
   echo "mini-agent-$(path_hash "$PWD")"
 }
 
-# Build the env var flags for docker run/exec
-get_env_flags() {
-  local flags=()
+# Write secrets to a temp file and return the volume-mount flag.
+# The temp file is deleted from the host as soon as the container starts.
+SECRET_TMPFILE=""
+
+prepare_secrets() {
+  local has_secret=false
   for var in AI_API_KEY AI_PROVIDER AI_MODEL; do
     if [[ -n "${!var:-}" ]]; then
-      flags+=(-e "$var=${!var}")
+      has_secret=true
+      break
     fi
   done
-  echo "${flags[*]:-}"
+
+  if [[ "$has_secret" == false ]]; then
+    SECRETS_MOUNT=()
+    return
+  fi
+
+  SECRET_TMPFILE=$(mktemp /tmp/mini-agent-secrets.XXXXXX)
+  for var in AI_API_KEY AI_PROVIDER AI_MODEL; do
+    [[ -n "${!var:-}" ]] && printf '%s=%s\n' "$var" "${!var}" >> "$SECRET_TMPFILE"
+  done
+
+  SECRETS_MOUNT=(-v "$SECRET_TMPFILE:/run/secrets/.env:ro")
 }
 
-# Parse env flags into array (handles empty case with set -e)
-parse_env_flags() {
-  local raw
-  raw="$(get_env_flags)"
-  if [[ -z "$raw" ]]; then
-    ENV_FLAGS=()
-  else
-    read -ra ENV_FLAGS <<< "$raw"
+# Remove the temp secrets file from the host
+cleanup_secrets() {
+  if [[ -n "$SECRET_TMPFILE" && -f "$SECRET_TMPFILE" ]]; then
+    rm -f "$SECRET_TMPFILE"
+    SECRET_TMPFILE=""
   fi
 }
 
@@ -105,15 +117,16 @@ ensure_running() {
     docker start "$name" >/dev/null
   else
     echo "  Starting new sandbox..."
-    parse_env_flags
+    prepare_secrets
     docker run -d \
       --name "$name" \
-      "${ENV_FLAGS[@]}" \
+      "${SECRETS_MOUNT[@]}" \
       -v "$PWD:$WORKSPACE" \
       -p "$SANDBOX_PORT:8080" \
       --security-opt seccomp=unconfined \
       --shm-size 2g \
       "$IMAGE_NAME" >/dev/null
+    cleanup_secrets
   fi
 
   wait_for_health "$name"
@@ -169,9 +182,8 @@ cmd_shell() {
 cmd_repl() {
   local name="$1"
   ensure_running "$name"
-  parse_env_flags
   echo "  Starting mini-agent REPL..."
-  docker exec -it "${ENV_FLAGS[@]}" -e NPM_CONFIG_LOGLEVEL=error -e NPM_CONFIG_UPDATE_NOTIFIER=false -u gem -w "$WORKSPACE" "$name" \
+  docker exec -it -e NPM_CONFIG_LOGLEVEL=error -e NPM_CONFIG_UPDATE_NOTIFIER=false -u gem -w "$WORKSPACE" "$name" \
     bun /opt/mini-agent/src/cli.ts
 }
 
@@ -179,8 +191,7 @@ cmd_print() {
   local name="$1"
   local prompt="$2"
   ensure_running "$name"
-  parse_env_flags
-  docker exec "${ENV_FLAGS[@]}" -e NPM_CONFIG_LOGLEVEL=error -e NPM_CONFIG_UPDATE_NOTIFIER=false -u gem -w "$WORKSPACE" "$name" \
+  docker exec -e NPM_CONFIG_LOGLEVEL=error -e NPM_CONFIG_UPDATE_NOTIFIER=false -u gem -w "$WORKSPACE" "$name" \
     bun /opt/mini-agent/src/cli.ts --print "$prompt"
 }
 

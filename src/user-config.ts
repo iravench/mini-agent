@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { getAgentDir } from "./config.js";
+import { env } from "./secrets.js";
 
 const configSchema = z
   .object({
@@ -52,10 +53,10 @@ export function saveConfig(config: UserConfig): void {
 
 /** Get effective provider name: CLI arg > config > env var. */
 export function resolveProvider(cliProvider?: string, config?: UserConfig): string | undefined {
-  return cliProvider ?? config?.defaultProvider ?? process.env.AI_PROVIDER;
+  return cliProvider ?? config?.defaultProvider ?? env("AI_PROVIDER");
 }
 
 /** Get effective model ID: CLI arg > config > env var. */
 export function resolveModelId(cliModel?: string, config?: UserConfig): string | undefined {
-  return cliModel ?? config?.defaultModel ?? process.env.AI_MODEL;
+  return cliModel ?? config?.defaultModel ?? env("AI_MODEL");
 }
