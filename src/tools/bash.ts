@@ -3,6 +3,7 @@ import { Type } from "@mariozechner/pi-ai";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 
 const MAX_OUTPUT = 16_384; // 16KB
+const WORKSPACE_ROOT = process.cwd();
 
 function truncate(text: string, max: number): string {
   if (text.length <= max) return text;
@@ -24,28 +25,32 @@ export const bashTool: AgentTool = {
     };
 
     return new Promise((resolve, reject) => {
-      const child = exec(command, { timeout, encoding: "utf-8" }, (error, stdout, stderr) => {
-        const result = [];
+      const child = exec(
+        command,
+        { cwd: WORKSPACE_ROOT, timeout, encoding: "utf-8" },
+        (error, stdout, stderr) => {
+          const result = [];
 
-        if (stdout) result.push(`STDOUT:\n${truncate(stdout, MAX_OUTPUT)}`);
-        if (stderr) result.push(`STDERR:\n${truncate(stderr, MAX_OUTPUT)}`);
-        if (error) result.push(`EXIT CODE: ${error.code ?? "unknown"}`);
+          if (stdout) result.push(`STDOUT:\n${truncate(stdout, MAX_OUTPUT)}`);
+          if (stderr) result.push(`STDERR:\n${truncate(stderr, MAX_OUTPUT)}`);
+          if (error) result.push(`EXIT CODE: ${error.code ?? "unknown"}`);
 
-        if (error && !stdout && !stderr) {
-          reject(new Error(`Command failed (exit ${error.code}): ${error.message}`));
-          return;
-        }
+          if (error && !stdout && !stderr) {
+            reject(new Error(`Command failed (exit ${error.code}): ${error.message}`));
+            return;
+          }
 
-        resolve({
-          content: [
-            {
-              type: "text" as const,
-              text: result.join("\n\n") || "Command completed with no output.",
-            },
-          ],
-          details: { exitCode: error?.code ?? 0 },
-        });
-      });
+          resolve({
+            content: [
+              {
+                type: "text" as const,
+                text: result.join("\n\n") || "Command completed with no output.",
+              },
+            ],
+            details: { exitCode: error?.code ?? 0 },
+          });
+        },
+      );
 
       signal?.addEventListener(
         "abort",

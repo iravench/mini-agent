@@ -85,7 +85,7 @@ cleanup_secrets() {
 
 is_proxy_running() {
   local port="$1"
-  curl -sf "http://localhost:${port}/health" &>/dev/null
+  curl -sf "http://127.0.0.1:${port}/health" &>/dev/null
 }
 
 start_proxy() {
@@ -177,17 +177,17 @@ ensure_running() {
   else
     echo "  Starting new sandbox..."
 
-    # Prepare secrets file (proxy URL + token) and start proxy
-    prepare_secrets
-    start_proxy
-
-    # Detect gateway IP for host.docker.internal
+    # Detect gateway IP for host.docker.internal and proxy binding
     local gateway
     gateway=$(get_gateway_ip)
     local add_host=()
     if [[ -n "$gateway" ]]; then
       add_host=(--add-host "host.docker.internal:$gateway")
     fi
+
+    # Prepare secrets file and start proxy
+    prepare_secrets
+    start_proxy
 
     docker run -d \
       --name "$name" \
@@ -205,6 +205,8 @@ ensure_running() {
       --mount type=tmpfs,target=/workspace/.git,tmpfs-size=1m \
       -p "$SANDBOX_PORT:8080" \
       --shm-size 2g \
+      --memory 4g \
+      --cpus 2 \
       "$IMAGE_NAME" >/dev/null
 
     # Don't cleanup secrets — proxy still needs the token file

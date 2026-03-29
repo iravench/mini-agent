@@ -12,8 +12,13 @@ import type {
 // ── CLI args ───────────────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
-const port = Number(args[args.indexOf("--port") + 1]) || 9821;
-const tokenFile = args[args.indexOf("--token-file") + 1];
+function getArg(flag: string): string | undefined {
+  const idx = args.indexOf(flag);
+  return idx !== -1 ? args[idx + 1] : undefined;
+}
+const port = Number(getArg("--port")) || 9821;
+const tokenFile = getArg("--token-file");
+const bindAddr = getArg("--bind") || "0.0.0.0";
 
 if (!tokenFile) {
   console.error("Usage: llm-proxy --port <num> --token-file <path>");
@@ -24,7 +29,7 @@ if (!tokenFile) {
 
 function readAuthToken(): string | null {
   try {
-    const content = readFileSync(tokenFile, "utf-8");
+    const content = readFileSync(tokenFile!, "utf-8");
     const match = content.match(/^LLM_PROXY_TOKEN=(.+)$/m);
     return match?.[1] ?? null;
   } catch {
@@ -180,8 +185,8 @@ const server = createServer(async (req, res) => {
   res.end("Not found");
 });
 
-server.listen(port, "0.0.0.0", () => {
-  console.log(`  LLM proxy listening on :${port}`);
+server.listen(port, bindAddr, () => {
+  console.log(`  LLM proxy listening on ${bindAddr}:${port}`);
 });
 
 process.on("SIGTERM", () => {
