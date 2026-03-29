@@ -15,11 +15,11 @@ function estimateTokens(messages: AgentMessage[]): number {
   return Math.ceil(chars / 3.5);
 }
 
-function getLastInputTokens(messages: AgentMessage[]): number | null {
+function getTotalTokensFromLastMessage(messages: AgentMessage[]): number | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
-    if (msg.role === "assistant" && msg.usage?.input > 0) {
-      return msg.usage.input;
+    if (msg.role === "assistant" && msg.usage?.totalTokens > 0) {
+      return msg.usage.totalTokens;
     }
   }
   return null;
@@ -46,7 +46,7 @@ export function createTransformContext(
 
   return async (messages: AgentMessage[], _signal?: AbortSignal): Promise<AgentMessage[]> => {
     // Prefer real provider token count; fall back to heuristic on first turn
-    const total = getLastInputTokens(messages) ?? estimateTokens(messages);
+    const total = getTotalTokensFromLastMessage(messages) ?? estimateTokens(messages);
     if (total < tokenBudget) return messages;
 
     if (messages.length <= protectTailCount) return messages;

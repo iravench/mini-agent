@@ -132,9 +132,11 @@ export function createAgent(options: CreateAgentOptions): Agent {
         retryAttempt = 0;
         const last = event.messages.at(-1);
         if (last?.role === "assistant" && last.usage) {
-          const { input, output, cost } = last.usage;
+          const { input, output, totalTokens, cost } = last.usage;
           process.stdout.write(
-            chalk.dim(`\n  [${input} in / ${output} out / $${cost.total.toFixed(4)}]\n`),
+            chalk.dim(
+              `\n  [${input} in / ${output} out / ${totalTokens} total / $${cost.total.toFixed(4)}]\n`,
+            ),
           );
         }
         break;
