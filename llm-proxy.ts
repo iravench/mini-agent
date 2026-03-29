@@ -18,7 +18,7 @@ function getArg(flag: string): string | undefined {
 }
 const port = Number(getArg("--port")) || 9821;
 const tokenFile = getArg("--token-file");
-const bindAddr = getArg("--bind") || "0.0.0.0";
+const bindAddr = getArg("--bind") || "127.0.0.1";
 
 if (!tokenFile) {
   console.error("Usage: llm-proxy --port <num> --token-file <path>");
@@ -161,7 +161,7 @@ async function handleStream(req: IncomingMessage, res: ServerResponse): Promise<
 
 // ── Server ─────────────────────────────────────────────────────────────
 
-const server = createServer(async (req, res) => {
+const requestHandler = async (req: IncomingMessage, res: ServerResponse) => {
   if (req.url === "/health" && req.method === "GET") {
     res.writeHead(200);
     res.end("ok");
@@ -183,7 +183,9 @@ const server = createServer(async (req, res) => {
 
   res.writeHead(404);
   res.end("Not found");
-});
+};
+
+const server = createServer(requestHandler);
 
 server.listen(port, bindAddr, () => {
   console.log(`  LLM proxy listening on ${bindAddr}:${port}`);

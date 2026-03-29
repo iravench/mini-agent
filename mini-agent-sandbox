@@ -85,7 +85,8 @@ cleanup_secrets() {
 
 is_proxy_running() {
   local port="$1"
-  curl -sf "http://127.0.0.1:${port}/health" &>/dev/null
+  local addr="${PROXY_BIND_ADDR:-127.0.0.1}"
+  curl -sf "http://${addr}:${port}/health" &>/dev/null
 }
 
 start_proxy() {
@@ -97,6 +98,7 @@ start_proxy() {
   nohup bun run "$SCRIPT_DIR/llm-proxy.ts" \
     --port "$PROXY_PORT" \
     --token-file "$SECRET_TMPFILE" \
+    --bind "${PROXY_BIND_ADDR:-127.0.0.1}" \
     >/dev/null 2>&1 &
   local pid=$!
 
@@ -185,8 +187,9 @@ ensure_running() {
       add_host=(--add-host "host.docker.internal:$gateway")
     fi
 
-    # Prepare secrets file and start proxy
+    # Prepare secrets file and start proxy (bind to gateway for container reachability)
     prepare_secrets
+    PROXY_BIND_ADDR="${gateway:-127.0.0.1}"
     start_proxy
 
     docker run -d \
