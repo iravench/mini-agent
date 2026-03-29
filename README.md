@@ -56,24 +56,28 @@ Resolution order: CLI flags > config file > env vars.
 | ---------------------- | ------------------------- | ---------------------- |
 | `AI_PROVIDER`          | LLM provider              | —                      |
 | `AI_MODEL`             | Model ID                  | Provider's first model |
-| `AI_API_KEY`           | API key fallback          | —                      |
+| `AI_API_KEY`           | API key                   | —                      |
+| `SANDBOX_PORT`         | Sandbox dashboard port    | `8080`                 |
 | `MINI_AGENT_HOME`      | Data directory            | `~/.mini-agent/`       |
 | `AI_CONTEXT_THRESHOLD` | Context pruning threshold | `0.8`                  |
 
 ## Sandbox
 
-Run mini-agent inside [AIO Sandbox](https://github.com/agent-infra/sandbox) for isolated execution.
+Run mini-agent inside [AIO Sandbox](https://github.com/agent-infra/sandbox) for isolated execution. API keys stay on the host — a lightweight proxy (`llm-proxy.ts`) forwards LLM calls into the container.
 
 ```bash
 # Build (once, or after code changes)
 ./mini-agent-sandbox --build
 
 # Run
-./mini-agent-sandbox "refactor the auth module"    # single-shot
-./mini-agent-sandbox --repl                         # interactive REPL
-./mini-agent-sandbox --detach                       # background sandbox
-./mini-agent-sandbox --shell                        # debug shell
+./mini-agent-sandbox "refactor the auth module"     # single-shot
+./mini-agent-sandbox --repl                         # interactive REPL with the mini agent
+./mini-agent-sandbox --detach                       # start sandbox in the background, so you can use the dashboard features
+./mini-agent-sandbox --shell                        # start into sandbox shell for debugging or other tasks
 ./mini-agent-sandbox --stop                         # teardown
+
+# Custom ports (so you can run multiple sandboxes)
+./mini-agent-sandbox --port 8081 --proxy-port 9822 --detach
 ```
 
 Requires Docker. Add to `~/.zshrc` for shorthand from any directory:

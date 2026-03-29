@@ -14,6 +14,7 @@ set -euo pipefail
 #   --repl               Run mini-agent in interactive REPL mode
 #   --stop               Stop and remove the sandbox container
 #   --port PORT          Exposed dashboard port (default: 8080)
+#   --proxy-port PORT    LLM proxy port (default: 9821)
 #   --help               Show this help
 #
 # No flags + prompt:     Single-shot agent run (--print mode)
@@ -24,6 +25,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 IMAGE_NAME="mini-agent-sandbox"
 WORKSPACE="/workspace"
 SANDBOX_PORT=8080
+PROXY_PORT=9821
 HEALTH_TIMEOUT=60
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -45,38 +47,95 @@ get_container_name() {
   echo "mini-agent-$(path_hash "$PWD")"
 }
 
-# Write secrets to a temp file and return the volume-mount flag.
-# The temp file is deleted from the host as soon as the container starts.
+# State for secrets file and proxy PID
 SECRET_TMPFILE=""
+PROXY_PIDFILE=""
+SANDBOX_HASH=""
 
 prepare_secrets() {
-  local has_secret=false
-  for var in AI_API_KEY AI_PROVIDER AI_MODEL; do
-    if [[ -n "${!var:-}" ]]; then
-      has_secret=true
-      break
-    fi
-  done
+  SANDBOX_HASH="$(path_hash "$PWD")"
+  SECRET_TMPFILE="/tmp/mini-agent-secrets.${SANDBOX_HASH}"
+  PROXY_PIDFILE="/tmp/mini-agent-proxy.${SANDBOX_HASH}.pid"
 
-  if [[ "$has_secret" == false ]]; then
-    SECRETS_MOUNT=()
-    return
-  fi
+  cat > "$SECRET_TMPFILE" <<EOF
+LLM_PROXY_URL=http://host.docker.internal:${PROXY_PORT}
+LLM_PROXY_TOKEN=$(openssl rand -hex 32)
+EOF
 
-  SECRET_TMPFILE=$(mktemp /tmp/mini-agent-secrets.XXXXXX)
-  for var in AI_API_KEY AI_PROVIDER AI_MODEL; do
+  # Model config (not secrets, but container needs them for resolution)
+  for var in AI_PROVIDER AI_MODEL; do
     [[ -n "${!var:-}" ]] && printf '%s=%s\n' "$var" "${!var}" >> "$SECRET_TMPFILE"
   done
 
   SECRETS_MOUNT=(-v "$SECRET_TMPFILE:/run/secrets/.env:ro")
 }
 
-# Remove the temp secrets file from the host
 cleanup_secrets() {
   if [[ -n "$SECRET_TMPFILE" && -f "$SECRET_TMPFILE" ]]; then
     rm -f "$SECRET_TMPFILE"
     SECRET_TMPFILE=""
   fi
+  if [[ -n "$PROXY_PIDFILE" && -f "$PROXY_PIDFILE" ]]; then
+    rm -f "$PROXY_PIDFILE"
+    PROXY_PIDFILE=""
+  fi
+}
+
+# ── LLM proxy lifecycle ─────────────────────────────────────────────────────
+
+is_proxy_running() {
+  local port="$1"
+  curl -sf "http://localhost:${port}/health" &>/dev/null
+}
+
+start_proxy() {
+  if is_proxy_running "$PROXY_PORT"; then
+    return 0
+  fi
+
+  echo "  Starting LLM proxy on :${PROXY_PORT}..."
+  nohup bun run "$SCRIPT_DIR/llm-proxy.ts" \
+    --port "$PROXY_PORT" \
+    --token-file "$SECRET_TMPFILE" \
+    >/dev/null 2>&1 &
+  local pid=$!
+
+  # Save PID so we can stop it later
+  echo "$pid" > "$PROXY_PIDFILE"
+
+  # Wait for proxy to be healthy
+  local elapsed=0
+  while (( elapsed < 10 )); do
+    if is_proxy_running "$PROXY_PORT"; then
+      return 0
+    fi
+    sleep 0.5
+    elapsed=$(( elapsed + 1 ))
+  done
+
+  echo "  Warning: LLM proxy did not start within 5s"
+  return 1
+}
+
+stop_proxy() {
+  # Only stop if we own the PID file
+  if [[ -n "$PROXY_PIDFILE" && -f "$PROXY_PIDFILE" ]]; then
+    local pid
+    pid=$(cat "$PROXY_PIDFILE" 2>/dev/null || true)
+    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+      echo "  Stopping LLM proxy..."
+      kill "$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+    fi
+    rm -f "$PROXY_PIDFILE"
+  fi
+}
+
+# ── Docker helpers ───────────────────────────────────────────────────────────
+
+# Detect Docker bridge gateway IP for host.docker.internal
+get_gateway_ip() {
+  docker network inspect bridge --format '{{.IPAM.Config[0].Gateway}}' 2>/dev/null || echo ""
 }
 
 # Check if container is running
@@ -117,16 +176,30 @@ ensure_running() {
     docker start "$name" >/dev/null
   else
     echo "  Starting new sandbox..."
+
+    # Prepare secrets file (proxy URL + token) and start proxy
     prepare_secrets
+    start_proxy
+
+    # Detect gateway IP for host.docker.internal
+    local gateway
+    gateway=$(get_gateway_ip)
+    local add_host=()
+    if [[ -n "$gateway" ]]; then
+      add_host=(--add-host "host.docker.internal:$gateway")
+    fi
+
     docker run -d \
       --name "$name" \
       "${SECRETS_MOUNT[@]}" \
+      "${add_host[@]}" \
       -v "$PWD:$WORKSPACE" \
       -p "$SANDBOX_PORT:8080" \
       --security-opt seccomp=unconfined \
       --shm-size 2g \
       "$IMAGE_NAME" >/dev/null
-    cleanup_secrets
+
+    # Don't cleanup secrets — proxy still needs the token file
   fi
 
   wait_for_health "$name"
@@ -150,6 +223,16 @@ cmd_stop() {
     echo "  Removing $name..."
     docker rm "$name" >/dev/null
   fi
+
+  # Reconstruct paths for cleanup (ensure_running may not have been called)
+  local hash
+  hash="$(path_hash "$PWD")"
+  PROXY_PIDFILE="/tmp/mini-agent-proxy.${hash}.pid"
+  SECRET_TMPFILE="/tmp/mini-agent-secrets.${hash}"
+
+  stop_proxy
+  cleanup_secrets
+
   echo "  Stopped."
 }
 
@@ -183,7 +266,7 @@ cmd_repl() {
   local name="$1"
   ensure_running "$name"
   echo "  Starting mini-agent REPL..."
-  docker exec -it -e NPM_CONFIG_LOGLEVEL=error -e NPM_CONFIG_UPDATE_NOTIFIER=false -u gem -w "$WORKSPACE" "$name" \
+  docker exec -it -u gem -w "$WORKSPACE" "$name" \
     bun /opt/mini-agent/src/cli.ts
 }
 
@@ -191,7 +274,7 @@ cmd_print() {
   local name="$1"
   local prompt="$2"
   ensure_running "$name"
-  docker exec -e NPM_CONFIG_LOGLEVEL=error -e NPM_CONFIG_UPDATE_NOTIFIER=false -u gem -w "$WORKSPACE" "$name" \
+  docker exec -u gem -w "$WORKSPACE" "$name" \
     bun /opt/mini-agent/src/cli.ts --print "$prompt"
 }
 
@@ -205,16 +288,16 @@ cmd_help() {
   echo "  --repl               Run mini-agent in REPL mode"
   echo "  --stop               Stop and remove sandbox container"
   echo "  --port PORT          Dashboard port (default: 8080)"
+  echo "  --proxy-port PORT    LLM proxy port (default: 9821)"
   echo "  --help               Show this help"
   echo ""
   echo "No flags + prompt:     Single-shot agent (--print)"
   echo "No flags + no prompt:  Start container + open shell"
   echo ""
   echo "Environment:"
-  echo "  AI_API_KEY           API key (required for agent modes)"
+  echo "  AI_API_KEY           API key (required, read by proxy on host)"
   echo "  AI_PROVIDER          Provider name (optional)"
   echo "  AI_MODEL             Model ID (optional)"
-  echo "  SANDBOX_PORT         Override default port"
 }
 
 # ── Main ─────────────────────────────────────────────────────────────────────
@@ -228,23 +311,25 @@ main() {
   # Parse args
   while (( $# > 0 )); do
     case "$1" in
-      --build)    command="build"; shift ;;
-      --detach)   command="detach"; shift ;;
-      --shell)    command="shell"; shift ;;
-      --repl)     command="repl"; shift ;;
-      --stop)     command="stop"; shift ;;
-      --port)     SANDBOX_PORT="$2"; shift 2 ;;
-      --help|-h)  cmd_help; exit 0 ;;
-      --)         shift; prompt="$*"; break ;;
-      -*)         echo "Unknown option: $1"; cmd_help; exit 1 ;;
-      *)          prompt="$*"; break ;;
+      --build)       command="build"; shift ;;
+      --detach)      command="detach"; shift ;;
+      --shell)       command="shell"; shift ;;
+      --repl)        command="repl"; shift ;;
+      --stop)        command="stop"; shift ;;
+      --port)        SANDBOX_PORT="$2"; shift 2 ;;
+      --proxy-port)  PROXY_PORT="$2"; shift 2 ;;
+      --help|-h)     cmd_help; exit 0 ;;
+      --)            shift; prompt="$*"; break ;;
+      -*)            echo "Unknown option: $1"; cmd_help; exit 1 ;;
+      *)             prompt="$*"; break ;;
     esac
   done
 
-  # Override port from env if set
+  # Override ports from env if set
   SANDBOX_PORT="${SANDBOX_PORT:-8080}"
+  PROXY_PORT="${PROXY_PORT:-9821}"
 
-  # Image check (except for --build and --help)
+  # Image check (except for --build and --stop)
   if [[ "$command" != "build" && "$command" != "stop" ]]; then
     if ! docker image inspect "$IMAGE_NAME" &>/dev/null; then
       echo "  Image not found: $IMAGE_NAME"

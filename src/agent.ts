@@ -1,4 +1,4 @@
-import { Agent } from "@mariozechner/pi-agent-core";
+import { Agent, streamProxy } from "@mariozechner/pi-agent-core";
 import { getEnvApiKey } from "@mariozechner/pi-ai";
 import type { Api, Model } from "@mariozechner/pi-ai";
 
@@ -36,18 +36,30 @@ export function createAgent(options: CreateAgentOptions): Agent {
   const retryEnabled = config?.retry?.enabled !== false;
   const maxRetries = config?.retry?.maxRetries ?? 3;
 
+  const proxyUrl = env("LLM_PROXY_URL");
+
   const agent = new Agent({
     initialState: {
       systemPrompt,
       model,
       tools,
     },
+    streamFn: proxyUrl
+      ? (_model, ctx, opts) =>
+          streamProxy(_model, ctx, {
+            ...opts,
+            proxyUrl,
+            authToken: env("LLM_PROXY_TOKEN") ?? "",
+          })
+      : undefined,
     toolExecution: "sequential",
     transformContext: createTransformContext({
       model,
       thresholdPercent: config?.contextThreshold,
     }),
     getApiKey: async () => {
+      // When proxying, the host resolves the API key
+      if (proxyUrl) return undefined;
       const key = getEnvApiKey(model.provider) ?? env("AI_API_KEY");
       if (!key) {
         throw new Error(
