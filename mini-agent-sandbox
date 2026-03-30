@@ -54,13 +54,17 @@ SANDBOX_HASH=""
 
 prepare_secrets() {
   SANDBOX_HASH="$(path_hash "$PWD")"
-  SECRET_TMPFILE="/tmp/mini-agent-secrets.${SANDBOX_HASH}"
-  PROXY_PIDFILE="/tmp/mini-agent-proxy.${SANDBOX_HASH}.pid"
+  SECRET_TMPFILE="/dev/shm/mini-agent-secrets.${SANDBOX_HASH}"
+  PROXY_PIDFILE="/dev/shm/mini-agent-proxy.${SANDBOX_HASH}.pid"
+
+  local proxy_token
+  proxy_token=$(openssl rand -hex 32)
 
   cat > "$SECRET_TMPFILE" <<EOF
 LLM_PROXY_URL=http://host.docker.internal:${PROXY_PORT}
-LLM_PROXY_TOKEN=$(openssl rand -hex 32)
+LLM_PROXY_TOKEN=${proxy_token}
 EOF
+  chmod 600 "$SECRET_TMPFILE"
 
   SECRETS_MOUNT=(-v "$SECRET_TMPFILE:/run/secrets/.env:ro")
 }
@@ -237,8 +241,8 @@ cmd_stop() {
   # Reconstruct paths for cleanup (ensure_running may not have been called)
   local hash
   hash="$(path_hash "$PWD")"
-  PROXY_PIDFILE="/tmp/mini-agent-proxy.${hash}.pid"
-  SECRET_TMPFILE="/tmp/mini-agent-secrets.${hash}"
+  PROXY_PIDFILE="/dev/shm/mini-agent-proxy.${hash}.pid"
+  SECRET_TMPFILE="/dev/shm/mini-agent-secrets.${hash}"
 
   stop_proxy
   cleanup_secrets
