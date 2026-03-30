@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { getAgentDir } from "./config.js";
-import { env } from "./secrets.js";
+import { env } from "./config.js";
 
 const configSchema = z
   .object({

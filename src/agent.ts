@@ -12,7 +12,7 @@ import { lsTool } from "./tools/ls.js";
 import { buildSystemPrompt } from "./system-prompt.js";
 import { createTransformContext } from "./context.js";
 import { enhanceToolErrors, isRetryableError, abortableSleep, backoffDelay } from "./errors.js";
-import { env } from "./secrets.js";
+import { env } from "./config.js";
 import type { UserConfig } from "./user-config.js";
 import type { SessionManager } from "./session.js";
 

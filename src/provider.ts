@@ -1,6 +1,6 @@
 import { getModels, getProviders } from "@mariozechner/pi-ai";
 import type { Api, KnownProvider, Model } from "@mariozechner/pi-ai";
-import { env } from "./secrets.js";
+import { env } from "./config.js";
 
 // ── Custom model definitions for providers not in the built-in registry ──
 // Extend this map to add OpenAI-compatible providers that pi-ai doesn't ship.

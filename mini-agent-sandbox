@@ -62,11 +62,6 @@ LLM_PROXY_URL=http://host.docker.internal:${PROXY_PORT}
 LLM_PROXY_TOKEN=$(openssl rand -hex 32)
 EOF
 
-  # Model config (not secrets, but container needs them for resolution)
-  for var in AI_PROVIDER AI_MODEL; do
-    [[ -n "${!var:-}" ]] && printf '%s=%s\n' "$var" "${!var}" >> "$SECRET_TMPFILE"
-  done
-
   SECRETS_MOUNT=(-v "$SECRET_TMPFILE:/run/secrets/.env:ro")
 }
 
@@ -203,6 +198,8 @@ ensure_running() {
       --cap-add=SETUID \
       --security-opt=no-new-privileges:true \
       "${SECRETS_MOUNT[@]}" \
+      -e "AI_PROVIDER=${AI_PROVIDER:-}" \
+      -e "AI_MODEL=${AI_MODEL:-}" \
       "${add_host[@]}" \
       -v "$PWD:$WORKSPACE" \
       --mount type=tmpfs,target=/workspace/.git,tmpfs-size=1m \
