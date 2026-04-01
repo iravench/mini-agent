@@ -4,23 +4,33 @@ import { env } from "./config.js";
 
 // ── Custom model definitions for providers not in the built-in registry ──
 // Extend this map to add OpenAI-compatible providers that pi-ai doesn't ship.
+//
+const kimiBase = {
+  api: "openai-completions",
+  provider: "moonshot",
+  baseUrl: "https://api.moonshot.ai/v1",
+  reasoning: true,
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+  contextWindow: 262_144,
+  maxTokens: 262_144,
+  compat: {
+    supportsDeveloperRole: false,
+    supportsStore: false,
+  },
+};
 
 const CUSTOM_MODELS: Record<string, Model<any>> = {
   "moonshot:kimi-k2-0905-preview": {
+    ...kimiBase,
     id: "kimi-k2-0905-preview",
     name: "Kimi K2 (Moonshot)",
-    api: "openai-completions",
-    provider: "moonshot",
-    baseUrl: "https://api.moonshot.ai/v1",
-    reasoning: true,
     input: ["text"],
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    contextWindow: 131_072,
-    maxTokens: 16_384,
-    compat: {
-      supportsDeveloperRole: false,
-      supportsStore: false,
-    },
+  },
+  "moonshot:kimi-k2.5": {
+    ...kimiBase,
+    id: "kimi-k2.5",
+    name: "Kimi K2.5 (Moonshot)",
+    input: ["text", "image"],
   },
 };
 

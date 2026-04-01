@@ -24,8 +24,8 @@ describe("user-config", () => {
 
   it("saves and loads config", () => {
     const cfg: UserConfig = {
-      defaultProvider: "anthropic",
-      defaultModel: "claude-sonnet-4-20250514",
+      defaultProvider: "moonshot",
+      defaultModel: "kimi-k2.5",
       contextThreshold: 0.85,
       customInstructions: "Use TypeScript strict mode",
     };
@@ -33,8 +33,8 @@ describe("user-config", () => {
     saveConfig(cfg);
     const loaded = loadConfig();
 
-    expect(loaded.defaultProvider).toBe("anthropic");
-    expect(loaded.defaultModel).toBe("claude-sonnet-4-20250514");
+    expect(loaded.defaultProvider).toBe("moonshot");
+    expect(loaded.defaultModel).toBe("kimi-k2.5");
     expect(loaded.contextThreshold).toBe(0.85);
     expect(loaded.customInstructions).toBe("Use TypeScript strict mode");
   });

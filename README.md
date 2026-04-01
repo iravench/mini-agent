@@ -5,9 +5,9 @@ Minimal coding agent CLI built on [pi-agent-core](https://github.com/mariozechne
 ## Setup
 
 ```bash
-npm install
+socket npm install && bun install    # socket is optional, it's for supply chain attack scan; bun install feeds off package-lock.json
 export AI_PROVIDER=moonshot          # openai, anthropic, google, moonshot, etc.
-export AI_MODEL=kimi-k2-0905-preview # optional, defaults to provider's first model
+export AI_MODEL=kimi-k2.5            # optional, defaults to provider's first model
 export AI_API_KEY=sk-...
 ```
 
@@ -21,7 +21,7 @@ npx tsx src/cli.ts --print "explain this project"      # single-shot
 npx tsx src/cli.ts --continue                          # resume last session
 npx tsx src/cli.ts --list                              # list sessions
 npx tsx src/cli.ts --session 57726a63                  # resume by ID
-npx tsx src/cli.ts --provider anthropic --model claude-sonnet-4-20250514
+npx tsx src/cli.ts --provider moonshot --model kimi-k2.5
 ```
 
 ## Tools
@@ -42,8 +42,8 @@ User config at `~/.mini-agent/config.json`:
 
 ```json
 {
-  "defaultProvider": "anthropic",
-  "defaultModel": "claude-sonnet-4-20250514",
+  "defaultProvider": "moonshot",
+  "defaultModel": "kimi-k2.5",
   "contextThreshold": 0.8,
   "customInstructions": "Always use TypeScript strict mode.",
   "retry": { "enabled": true, "maxRetries": 3 }

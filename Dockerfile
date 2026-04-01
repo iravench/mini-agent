@@ -13,8 +13,8 @@ RUN curl -fsSL https://bun.sh/install | bash \
 
 # Install mini-agent production dependencies (cached layer)
 WORKDIR /opt/mini-agent
-COPY package.json package-lock.json* ./
-RUN bun install --production --frozen-lockfile 2>/dev/null || bun install --production
+COPY package.json package-lock.json bun.lock ./
+RUN bun install --production --frozen-lockfile
 
 # Copy source code
 COPY src/ src/
