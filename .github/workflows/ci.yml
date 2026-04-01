@@ -14,24 +14,24 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
-
-      - run: npm ci
 
       - name: Install system dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y ripgrep fd-find
           sudo ln -sf $(which fdfind) /usr/local/bin/fd
 
-      - name: Typecheck
-        run: npm run typecheck
+      - name: Install Socket.dev for supply chain attack protection
+        run: npm install -g @socketsecurity/cli
 
-      - name: Lint
-        run: npm run lint
+      - name: Install app dependencies
+        env:
+          SOCKET_SECURITY_API_KEY: ${{ secrets.SOCKET_SECURITY_API_KEY }}
+        run: socket npm ci
 
-      - name: Format check
-        run: npm run format:check
+      - name: Check type/lint/format
+        run: npm run check
 
       - name: Test
         run: npm test
