@@ -1,6 +1,6 @@
 # mini-agent
 
-Minimal coding agent CLI built on [pi-agent-core](https://github.com/mariozechner/pi-mono) + [pi-ai](https://github.com/mariozechner/pi-mono).
+Minimal coding agent CLI built on [pi-agent-core](https://github.com/mariozechner/pi-mono) + [pi-ai](https://github.com/mariozechner/pi-mono). Interactive mode uses an [OpenTUI](https://github.com/anomalyco/opentui) terminal UI.
 
 ## Setup
 
@@ -11,18 +11,27 @@ export AI_MODEL=kimi-k2.5            # optional, defaults to provider's first mo
 export AI_API_KEY=sk-...
 ```
 
-Requires Node.js 22+, ripgrep (`rg`), and fd (`fd`).
+Requires [Bun](https://bun.sh), ripgrep (`rg`), and fd (`fd`).
 
 ## Usage
 
 ```bash
-npx tsx src/cli.ts                                    # REPL
-npx tsx src/cli.ts --print "explain this project"      # single-shot
-npx tsx src/cli.ts --continue                          # resume last session
-npx tsx src/cli.ts --list                              # list sessions
-npx tsx src/cli.ts --session 57726a63                  # resume by ID
-npx tsx src/cli.ts --provider moonshot --model kimi-k2.5
+bun src/cli.ts                                    # TUI (interactive)
+bun src/cli.ts --print "explain this project"      # single-shot
+bun src/cli.ts --continue                          # resume last session
+bun src/cli.ts --list                              # list sessions
+bun src/cli.ts --session 57726a63                  # resume by ID
+bun src/cli.ts --provider moonshot --model kimi-k2.5
 ```
+
+### Keyboard shortcuts (TUI)
+
+| Key    | Action         |
+| ------ | -------------- |
+| Enter  | Submit message |
+| Ctrl+C | Abort / Exit   |
+| Ctrl+K | Session list   |
+| Ctrl+/ | Toggle help    |
 
 ## Tools
 
@@ -98,10 +107,9 @@ Then: `ma "prompt"`, `ma --repl`, `ma --stop`.
 ## Dev
 
 ```bash
-npm run dev          # watch mode
-npm test             # run tests
-npm run lint         # ESLint
-npm run format       # Prettier
-npm run typecheck    # type check
-npm run build        # compile to dist/
+bun run dev          # watch mode
+bun test             # run tests
+bun run lint         # ESLint
+bun run check        # typecheck + lint + prettier
+bun run build        # compile to dist/
 ```

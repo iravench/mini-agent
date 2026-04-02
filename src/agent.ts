@@ -22,6 +22,8 @@ export interface CreateAgentOptions {
   model: Model<Api>;
   session?: SessionManager;
   config?: UserConfig;
+  /** Suppress stdout output -- use when the TUI handles rendering. */
+  quiet?: boolean;
 }
 
 export function createAgent(options: CreateAgentOptions): Agent {
@@ -86,6 +88,7 @@ export function createAgent(options: CreateAgentOptions): Agent {
   agent.subscribe((event) => {
     switch (event.type) {
       case "message_update": {
+        if (options.quiet) break;
         const e = event.assistantMessageEvent;
         if (e.type === "text_delta") {
           process.stdout.write(chalk.white(e.delta));
@@ -93,27 +96,29 @@ export function createAgent(options: CreateAgentOptions): Agent {
         break;
       }
       case "tool_execution_start": {
+        if (options.quiet) break;
         const args = JSON.stringify(event.args);
         const truncated = args.length > 120 ? args.slice(0, 120) + "..." : args;
-        process.stdout.write(chalk.dim(`\n  ⚡ ${event.toolName}(${truncated})\n`));
+        process.stdout.write(chalk.dim(`\n  ${event.toolName}(${truncated})\n`));
         break;
       }
       case "tool_execution_end": {
+        if (options.quiet) break;
         if (event.isError) {
           const firstContent = event.result.content?.[0];
           const resultText = firstContent?.type === "text" ? firstContent.text : "error";
-          // Show first line only in terminal (hints are long)
           const firstLine = resultText.split("\n")[0];
-          process.stdout.write(chalk.red(`  ✗ ${event.toolName}: ${firstLine}\n`));
+          process.stdout.write(chalk.red(`  X ${event.toolName}: ${firstLine}\n`));
         } else {
-          process.stdout.write(chalk.dim("  ✓ done\n"));
+          process.stdout.write(chalk.dim("  done\n"));
         }
         break;
       }
       case "message_end": {
+        // Session saving always runs
         session?.appendMessage(event.message);
 
-        // Check for retryable API errors
+        // Retry logic always runs
         const msg = event.message;
         if (
           retryEnabled &&
@@ -125,11 +130,13 @@ export function createAgent(options: CreateAgentOptions): Agent {
           retryAttempt++;
           if (retryAttempt <= maxRetries) {
             const delay = backoffDelay(retryAttempt);
-            process.stdout.write(
-              chalk.yellow(
-                `\n  ⚠ API error, retrying in ${delay / 1000}s (attempt ${retryAttempt}/${maxRetries})...\n`,
-              ),
-            );
+            if (!options.quiet) {
+              process.stdout.write(
+                chalk.yellow(
+                  `\n  API error, retrying in ${delay / 1000}s (attempt ${retryAttempt}/${maxRetries})...\n`,
+                ),
+              );
+            }
             abortableSleep(delay)
               .then(() => agent.continue())
               .catch(() => {
@@ -143,6 +150,7 @@ export function createAgent(options: CreateAgentOptions): Agent {
       }
       case "agent_end": {
         retryAttempt = 0;
+        if (options.quiet) break;
         const last = event.messages.at(-1);
         if (last?.role === "assistant" && last.usage) {
           const { input, output, totalTokens, cost } = last.usage;

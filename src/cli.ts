@@ -1,42 +1,14 @@
-import * as readline from "node:readline";
-import { createRequire } from "node:module";
 import { existsSync } from "node:fs";
 import { createAgent } from "./agent.js";
 import { resolveModel } from "./provider.js";
 import { SessionManager } from "./session.js";
 import { loadConfig } from "./user-config.js";
+import { startTUI } from "./tui/app.js";
 import chalk from "chalk";
 
 import type { Api, Model } from "@mariozechner/pi-ai";
 import type { SessionManager as SessionManagerType } from "./session.js";
 import type { UserConfig } from "./user-config.js";
-
-// ── Version ───────────────────────────────────────────────────────────
-const require = createRequire(import.meta.url);
-const VERSION: string = require("../package.json").version;
-
-// ── Banner ────────────────────────────────────────────────────────────
-function printBanner(providerName: string, modelName: string) {
-  const label = `${modelName} · ${providerName}`;
-  // Pad to fit the box width (inner width = 36 chars)
-  const padded = label.length > 34 ? label.slice(0, 33) + "…" : label;
-  const padding = " ".repeat(36 - padded.length);
-  const versionStr = `v${VERSION}`;
-  const versionPad = " ".repeat(Math.max(0, 36 - 12 - versionStr.length));
-
-  console.log(chalk.cyan("  ╔══════════════════════════════════════╗"));
-  console.log(
-    chalk.cyan("  ║") +
-      chalk.bold("  mini-agent  ") +
-      chalk.dim(versionStr) +
-      chalk.dim(`${versionPad}║`),
-  );
-  console.log(chalk.cyan("  ║") + chalk.dim(`  ${padded}${padding}║`));
-  console.log(chalk.cyan("  ╚══════════════════════════════════════╝"));
-  console.log();
-  console.log(chalk.dim("  Type your message. Ctrl+C to abort. Ctrl+C twice to exit."));
-  console.log();
-}
 
 // ── Print mode (single-shot) ──────────────────────────────────────────
 async function printMode(
@@ -53,59 +25,6 @@ async function printMode(
     console.error(chalk.red(`Error: ${(err as Error).message}`));
     process.exit(1);
   }
-}
-
-// ── REPL ──────────────────────────────────────────────────────────────
-async function replMode(model: Model<Api>, session?: SessionManagerType, config?: UserConfig) {
-  const agent = createAgent({ model, session, config });
-
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-    prompt: chalk.cyan("> "),
-  });
-
-  let isRunning = false;
-
-  rl.on("SIGINT", () => {
-    if (isRunning) {
-      agent.abort();
-      console.log(chalk.yellow("\n  ⏹ Aborted."));
-      isRunning = false;
-      rl.prompt();
-    } else {
-      console.log(chalk.dim("\n  Bye."));
-      rl.close();
-    }
-  });
-
-  rl.prompt();
-
-  rl.on("line", async (input) => {
-    const trimmed = input.trim();
-    if (!trimmed) {
-      rl.prompt();
-      return;
-    }
-
-    isRunning = true;
-    try {
-      await agent.prompt(trimmed);
-      console.log();
-    } catch (err) {
-      if ((err as Error).name === "AbortError") {
-        console.log(chalk.yellow("\n  ⏹ Aborted."));
-      } else {
-        console.error(chalk.red(`\n  Error: ${(err as Error).message}`));
-      }
-    }
-    isRunning = false;
-    rl.prompt();
-  });
-
-  rl.on("close", () => {
-    process.exit(0);
-  });
 }
 
 // ── List sessions ─────────────────────────────────────────────────────
@@ -203,8 +122,9 @@ async function main() {
     }
     await printMode(message, model, session, config);
   } else {
-    printBanner(model.provider, model.name);
-    await replMode(model, session, config);
+    // Interactive mode -- launch TUI (quiet: suppress stdout subscriber)
+    const agent = createAgent({ model, session, config, quiet: true });
+    await startTUI({ agent, session, providerName: model.provider, modelName: model.name });
   }
 }
 

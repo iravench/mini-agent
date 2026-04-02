@@ -23,13 +23,13 @@ const CUSTOM_MODELS: Record<string, Model<any>> = {
   "moonshot:kimi-k2-0905-preview": {
     ...kimiBase,
     id: "kimi-k2-0905-preview",
-    name: "Kimi K2 (Moonshot)",
+    name: "Kimi K2",
     input: ["text"],
   },
   "moonshot:kimi-k2.5": {
     ...kimiBase,
     id: "kimi-k2.5",
-    name: "Kimi K2.5 (Moonshot)",
+    name: "Kimi K2.5",
     input: ["text", "image"],
   },
 };
