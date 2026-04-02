@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { createAgent } from "./agent.js";
+import { subscribeCore, subscribeStdout } from "./subscriptions.js";
 import { resolveModel } from "./provider.js";
 import { SessionManager } from "./session.js";
 import { loadConfig } from "./user-config.js";
@@ -14,10 +15,12 @@ import type { UserConfig } from "./user-config.js";
 async function printMode(
   message: string,
   model: Model<Api>,
-  session?: SessionManagerType,
+  session: SessionManagerType,
   config?: UserConfig,
 ) {
   const agent = createAgent({ model, session, config });
+  subscribeCore({ agent, session, config });
+  subscribeStdout(agent);
   try {
     await agent.prompt(message);
     console.log();
@@ -41,7 +44,8 @@ async function printSessions(cwd: string) {
     const modified = chalk.dim(
       s.modified.toLocaleDateString() + " " + s.modified.toLocaleTimeString(),
     );
-    const preview = s.firstMessage.length > 60 ? s.firstMessage.slice(0, 57) + "…" : s.firstMessage;
+    const preview =
+      s.firstMessage.length > 60 ? s.firstMessage.slice(0, 57) + "..." : s.firstMessage;
     console.log(`  ${id}  ${msgs}  ${modified}  ${preview}`);
   }
   console.log();
@@ -122,8 +126,9 @@ async function main() {
     }
     await printMode(message, model, session, config);
   } else {
-    // Interactive mode -- launch TUI (quiet: suppress stdout subscriber)
-    const agent = createAgent({ model, session, config, quiet: true });
+    // Interactive mode -- compose core subscriptions (quiet: TUI handles rendering)
+    const agent = createAgent({ model, session, config });
+    subscribeCore({ agent, session, config, quiet: true });
     await startTUI({ agent, session, providerName: model.provider, modelName: model.name });
   }
 }

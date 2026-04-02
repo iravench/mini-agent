@@ -1,25 +1,24 @@
 import { createCliRenderer } from "@opentui/core";
 import { createRoot, useKeyboard, useTerminalDimensions } from "@opentui/react";
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import type { Agent } from "@mariozechner/pi-agent-core";
 import { SessionManager } from "../session.js";
-import type { SessionInfo } from "../session.js";
 
 import { useAgent } from "./use-agent.js";
 import { MessageList } from "./message-list.js";
 import { Prompt } from "./prompt.js";
 import { StatusBar } from "./status-bar.js";
 import { HelpDialog } from "./help-dialog.js";
-import { SessionListDialog } from "./dialogs/session-list.js";
 
 interface TUIAppProps {
   agent: Agent;
   session: SessionManager;
   providerName: string;
   modelName: string;
+  onExit: () => void;
 }
 
-function TUIApp({ agent, session, providerName, modelName }: TUIAppProps) {
+function TUIApp({ agent, session, providerName, modelName, onExit }: TUIAppProps) {
   const { width, height } = useTerminalDimensions();
   const { state, sendPrompt, abort } = useAgent({
     agent,
@@ -29,8 +28,6 @@ function TUIApp({ agent, session, providerName, modelName }: TUIAppProps) {
   });
 
   const [showHelp, setShowHelp] = useState(false);
-  const [showSessions, setShowSessions] = useState(false);
-  const [sessions, setSessions] = useState<SessionInfo[]>([]);
 
   // Layout: status bar (1) + prompt (5) + messages (rest)
   const statusBarHeight = 1;
@@ -45,22 +42,7 @@ function TUIApp({ agent, session, providerName, modelName }: TUIAppProps) {
       if (state.isGenerating) {
         abort();
       } else {
-        process.exit(0);
-      }
-      return;
-    }
-
-    // Ctrl+K: toggle session list
-    if (key.name === "k" && key.ctrl) {
-      key.preventDefault();
-      key.stopPropagation();
-      if (showSessions) {
-        setShowSessions(false);
-      } else {
-        SessionManager.list(session.getCwd()).then((s) => {
-          setSessions(s);
-          setShowSessions(true);
-        });
+        onExit();
       }
       return;
     }
@@ -78,20 +60,9 @@ function TUIApp({ agent, session, providerName, modelName }: TUIAppProps) {
       key.preventDefault();
       key.stopPropagation();
       if (showHelp) setShowHelp(false);
-      if (showSessions) setShowSessions(false);
       return;
     }
   });
-
-  const handleSessionSelect = useCallback((_sessionPath: string) => {
-    setShowSessions(false);
-    // For now, just close the dialog. Full session switching
-    // would require recreating the agent with a new session.
-  }, []);
-
-  const handleSessionCancel = useCallback(() => {
-    setShowSessions(false);
-  }, []);
 
   return (
     <box width={width} height={height} flexDirection="column">
@@ -113,13 +84,6 @@ function TUIApp({ agent, session, providerName, modelName }: TUIAppProps) {
         isGenerating={state.isGenerating}
       />
       {showHelp && <HelpDialog onClose={() => setShowHelp(false)} />}
-      {showSessions && (
-        <SessionListDialog
-          sessions={sessions}
-          onSelect={handleSessionSelect}
-          onCancel={handleSessionCancel}
-        />
-      )}
     </box>
   );
 }
@@ -140,6 +104,12 @@ export async function startTUI(options: StartTUIOptions) {
     consoleMode: "disabled",
   });
 
+  const exit = () => {
+    if (!renderer.isDestroyed) {
+      renderer.destroy();
+    }
+  };
+
   const root = createRoot(renderer);
   root.render(
     <TUIApp
@@ -147,18 +117,14 @@ export async function startTUI(options: StartTUIOptions) {
       session={options.session}
       providerName={options.providerName}
       modelName={options.modelName}
+      onExit={exit}
     />,
   );
 
   // Ensure clean shutdown
-  const cleanup = () => {
-    if (!renderer.isDestroyed) {
-      renderer.destroy();
-    }
-  };
-  process.on("exit", cleanup);
+  process.on("exit", exit);
   process.on("SIGTERM", () => {
-    cleanup();
+    exit();
     process.exit(0);
   });
 }

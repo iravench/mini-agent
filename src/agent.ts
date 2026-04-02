@@ -11,19 +11,15 @@ import { findTool } from "./tools/find.js";
 import { lsTool } from "./tools/ls.js";
 import { buildSystemPrompt } from "./system-prompt.js";
 import { createTransformContext } from "./context.js";
-import { enhanceToolErrors, isRetryableError, abortableSleep, backoffDelay } from "./errors.js";
+import { enhanceToolErrors } from "./errors.js";
 import { env } from "./config.js";
 import type { UserConfig } from "./user-config.js";
 import type { SessionManager } from "./session.js";
-
-import chalk from "chalk";
 
 export interface CreateAgentOptions {
   model: Model<Api>;
   session?: SessionManager;
   config?: UserConfig;
-  /** Suppress stdout output -- use when the TUI handles rendering. */
-  quiet?: boolean;
 }
 
 export function createAgent(options: CreateAgentOptions): Agent {
@@ -34,9 +30,6 @@ export function createAgent(options: CreateAgentOptions): Agent {
   if (config?.customInstructions) {
     systemPrompt += `\n\n## User Instructions\n${config.customInstructions}`;
   }
-
-  const retryEnabled = config?.retry?.enabled !== false;
-  const maxRetries = config?.retry?.maxRetries ?? 3;
 
   const proxyUrl = env("LLM_PROXY_URL");
 
@@ -81,89 +74,6 @@ export function createAgent(options: CreateAgentOptions): Agent {
       agent.replaceMessages(messages);
     }
   }
-
-  // Track retry state across prompt calls
-  let retryAttempt = 0;
-
-  agent.subscribe((event) => {
-    switch (event.type) {
-      case "message_update": {
-        if (options.quiet) break;
-        const e = event.assistantMessageEvent;
-        if (e.type === "text_delta") {
-          process.stdout.write(chalk.white(e.delta));
-        }
-        break;
-      }
-      case "tool_execution_start": {
-        if (options.quiet) break;
-        const args = JSON.stringify(event.args);
-        const truncated = args.length > 120 ? args.slice(0, 120) + "..." : args;
-        process.stdout.write(chalk.dim(`\n  ${event.toolName}(${truncated})\n`));
-        break;
-      }
-      case "tool_execution_end": {
-        if (options.quiet) break;
-        if (event.isError) {
-          const firstContent = event.result.content?.[0];
-          const resultText = firstContent?.type === "text" ? firstContent.text : "error";
-          const firstLine = resultText.split("\n")[0];
-          process.stdout.write(chalk.red(`  X ${event.toolName}: ${firstLine}\n`));
-        } else {
-          process.stdout.write(chalk.dim("  done\n"));
-        }
-        break;
-      }
-      case "message_end": {
-        // Session saving always runs
-        session?.appendMessage(event.message);
-
-        // Retry logic always runs
-        const msg = event.message;
-        if (
-          retryEnabled &&
-          msg.role === "assistant" &&
-          msg.stopReason === "error" &&
-          msg.errorMessage &&
-          isRetryableError(msg.errorMessage)
-        ) {
-          retryAttempt++;
-          if (retryAttempt <= maxRetries) {
-            const delay = backoffDelay(retryAttempt);
-            if (!options.quiet) {
-              process.stdout.write(
-                chalk.yellow(
-                  `\n  API error, retrying in ${delay / 1000}s (attempt ${retryAttempt}/${maxRetries})...\n`,
-                ),
-              );
-            }
-            abortableSleep(delay)
-              .then(() => agent.continue())
-              .catch(() => {
-                /* aborted */
-              });
-            return;
-          }
-        }
-        retryAttempt = 0;
-        break;
-      }
-      case "agent_end": {
-        retryAttempt = 0;
-        if (options.quiet) break;
-        const last = event.messages.at(-1);
-        if (last?.role === "assistant" && last.usage) {
-          const { input, output, totalTokens, cost } = last.usage;
-          process.stdout.write(
-            chalk.dim(
-              `\n  [${input} in / ${output} out / ${totalTokens} total / $${cost.total.toFixed(4)}]\n`,
-            ),
-          );
-        }
-        break;
-      }
-    }
-  });
 
   return agent;
 }

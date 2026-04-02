@@ -2,11 +2,12 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import type { Agent, AgentEvent, AgentMessage } from "@mariozechner/pi-agent-core";
 import type { MessageBlock, TUIState, AssistantBlock, ThinkingBlock, UsageInfo } from "./types.js";
 
-function extractText(message: any): string {
-  if (!message) return "";
-  if (typeof message.content === "string") return message.content;
-  if (Array.isArray(message.content)) {
-    return message.content
+/** Extract plain text from a message's content (string or content-block array). */
+function extractTextFromContent(content: unknown): string {
+  if (!content) return "";
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
       .filter((c: any) => c.type === "text")
       .map((c: any) => c.text)
       .join(" ");
@@ -24,7 +25,11 @@ function messagesToBlocks(messages: AgentMessage[]): {
 
   for (const msg of messages) {
     if (msg.role === "user") {
-      blocks.push({ kind: "user", message: msg, text: extractText(msg) });
+      blocks.push({
+        kind: "user",
+        message: msg,
+        text: extractTextFromContent((msg as any).content),
+      });
     } else if (msg.role === "assistant") {
       const content = (msg as any).content;
       if (Array.isArray(content)) {
