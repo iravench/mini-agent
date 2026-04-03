@@ -5,16 +5,20 @@ interface HelpDialogProps {
 const SHORTCUTS: [string, string][] = [
   ["Enter", "Submit message"],
   ["Ctrl+C", "Abort generation / Exit"],
-  ["Ctrl+K", "Session list"],
-  ["Ctrl+/", "Toggle help"],
-  ["Page Up/Down", "Scroll history"],
+  ["F1", "Toggle help"],
+  ["F2", "Session list"],
+  ["Esc", "Close dialogs"],
 ];
 
 export function HelpDialog({ onClose: _onClose }: HelpDialogProps) {
   return (
     <box
+      position="absolute"
+      left="30%"
+      top="25%"
       width={50}
       height={SHORTCUTS.length + 5}
+      zIndex={100}
       borderStyle="rounded"
       borderColor="#58A6FF"
       backgroundColor="#0D1117"

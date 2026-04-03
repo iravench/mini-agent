@@ -30,8 +30,9 @@ bun src/cli.ts --provider moonshot --model kimi-k2.5
 | ------ | -------------- |
 | Enter  | Submit message |
 | Ctrl+C | Abort / Exit   |
-| Ctrl+K | Session list   |
-| Ctrl+/ | Toggle help    |
+| F1     | Toggle help    |
+| F2     | Session list   |
+| Esc    | Close dialogs  |
 
 ## Tools
 

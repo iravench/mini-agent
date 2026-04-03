@@ -86,6 +86,20 @@ export function useAgent(options: UseAgentOptions) {
     };
   });
 
+  // Reset state when the agent changes (e.g. session switch)
+  useEffect(() => {
+    const { blocks, lastUsage } = messagesToBlocks(agent.state.messages);
+    setState({
+      blocks,
+      usage: lastUsage,
+      isGenerating: false,
+      sessionId,
+      providerName,
+      modelName,
+      error: null,
+    });
+  }, [agent, sessionId, providerName, modelName]);
+
   const agentRef = useRef(agent);
   agentRef.current = agent;
 

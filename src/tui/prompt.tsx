@@ -7,9 +7,10 @@ interface PromptProps {
   onSubmit: (text: string) => void;
   onAbort: () => void;
   isGenerating: boolean;
+  focused: boolean;
 }
 
-export function Prompt({ width, height, onSubmit, onAbort, isGenerating }: PromptProps) {
+export function Prompt({ width, height, onSubmit, onAbort, isGenerating, focused }: PromptProps) {
   const textareaRef = useRef<TextareaRenderable>(null);
 
   const handleSubmit = useCallback(() => {
@@ -53,7 +54,7 @@ export function Prompt({ width, height, onSubmit, onAbort, isGenerating }: Promp
         textColor="#E6EDF3"
         cursorColor="#58A6FF"
         wrapMode="word"
-        focused={true}
+        focused={focused}
         keyBindings={[{ name: "return", action: "submit" }]}
         onSubmit={handleSubmit}
       />

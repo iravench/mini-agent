@@ -129,7 +129,18 @@ async function main() {
     // Interactive mode -- compose core subscriptions (quiet: TUI handles rendering)
     const agent = createAgent({ model, session, config });
     subscribeCore({ agent, session, config, quiet: true });
-    await startTUI({ agent, session, providerName: model.provider, modelName: model.name });
+    await startTUI({
+      agent,
+      session,
+      providerName: model.provider,
+      modelName: model.name,
+      onSessionSwitch: async (sessionPath: string) => {
+        const newSession = await SessionManager.open(sessionPath);
+        const newAgent = createAgent({ model, session: newSession, config });
+        subscribeCore({ agent: newAgent, session: newSession, config, quiet: true });
+        return { agent: newAgent, session: newSession };
+      },
+    });
   }
 }
 

@@ -7,11 +7,7 @@ interface SessionListDialogProps {
   onCancel: () => void;
 }
 
-export function SessionListDialog({
-  sessions,
-  onSelect,
-  onCancel: _onCancel,
-}: SessionListDialogProps) {
+export function SessionListDialog({ sessions, onSelect }: SessionListDialogProps) {
   const options = sessions.map((s) => ({
     name: `${s.id.slice(0, 8)}  ${s.messageCount} msgs`,
     description: s.firstMessage.length > 60 ? s.firstMessage.slice(0, 57) + "..." : s.firstMessage,
@@ -19,7 +15,7 @@ export function SessionListDialog({
   }));
 
   const handleSelect = useCallback(
-    (_index: number, option: any | null) => {
+    (index: number, option: { name: string; description: string; value?: string } | null) => {
       if (option?.value) {
         onSelect(option.value);
       }
@@ -29,8 +25,12 @@ export function SessionListDialog({
 
   return (
     <box
+      position="absolute"
+      left="10%"
+      top="20%"
       width="80%"
       height="60%"
+      zIndex={100}
       borderStyle="rounded"
       borderColor="#58A6FF"
       backgroundColor="#0D1117"
@@ -38,10 +38,10 @@ export function SessionListDialog({
       flexDirection="column"
     >
       <text fg="#58A6FF">
-        <b>Sessions</b>
+        <b>Sessions ({sessions.length})</b>
       </text>
       <text fg="#8B949E">Select a session to resume (Esc to cancel).</text>
-      <select options={options} onSelect={handleSelect} focused={true} />
+      <select flexGrow={1} options={options} onSelect={handleSelect} focused={true} />
     </box>
   );
 }
