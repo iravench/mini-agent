@@ -12,6 +12,7 @@ export interface SessionHeader {
   id: string;
   timestamp: string;
   cwd: string;
+  title: string | null;
 }
 
 export interface SessionMessageEntry {
@@ -29,6 +30,7 @@ export interface SessionInfo {
   path: string;
   id: string;
   cwd: string;
+  title: string | null;
   created: Date;
   modified: Date;
   messageCount: number;
@@ -124,6 +126,7 @@ async function buildSessionInfoAsync(filePath: string): Promise<SessionInfo | nu
       path: filePath,
       id: sessionHeader.id,
       cwd: sessionHeader.cwd,
+      title: sessionHeader.title ?? null,
       created: new Date(sessionHeader.timestamp),
       modified: fileStat.mtime,
       messageCount,
@@ -299,6 +302,7 @@ export class SessionManager {
       id: this.sessionId,
       timestamp,
       cwd: this.cwd,
+      title: null,
     };
     this.fileEntries = [header];
     this.byId.clear();

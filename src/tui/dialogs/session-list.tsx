@@ -1,5 +1,69 @@
-import { useCallback } from "react";
+import { useCallback, useMemo, useState, useRef, useEffect } from "react";
+import fuzzysort from "fuzzysort";
+import { useKeyboard } from "@opentui/react";
 import type { SessionInfo } from "../../session.js";
+
+type FuzzyResult = ReturnType<typeof fuzzysort.single>;
+
+const HIGHLIGHT_OPEN = "\x00";
+const HIGHLIGHT_CLOSE = "\x01";
+
+function getDisplayTitle(s: SessionInfo): string {
+  if (s.title) return s.title;
+  const words = s.firstMessage.split(/\s+/).slice(0, 8).join(" ");
+  return words.length > 60 ? words.slice(0, 57) + "..." : words || "(no messages)";
+}
+
+function relativeTime(date: Date): string {
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 4) return `${weeks}w ago`;
+  const months = Math.floor(days / 30);
+  return `${months}mo ago`;
+}
+
+function buildSearchTarget(s: SessionInfo): string {
+  const parts = [s.title ?? "", s.firstMessage, s.cwd];
+  return parts.join(" ");
+}
+
+function renderHighlighted(text: string, result: FuzzyResult): React.ReactNode {
+  if (!result) return text;
+
+  const highlighted = result.highlight(HIGHLIGHT_OPEN, HIGHLIGHT_CLOSE);
+  const segments = highlighted.split(HIGHLIGHT_OPEN);
+  if (segments.length === 1) return text;
+
+  const children: React.ReactNode[] = [];
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i];
+    const closeIdx = segment.indexOf(HIGHLIGHT_CLOSE);
+    if (closeIdx === -1) {
+      children.push(segment);
+    } else {
+      if (closeIdx > 0) children.push(segment.slice(0, closeIdx));
+      children.push(
+        <span key={`hl-${i}`} fg="#FFD700">
+          {segment.slice(closeIdx + 1)}
+        </span>,
+      );
+    }
+  }
+  return children;
+}
+
+interface FilteredSession {
+  session: SessionInfo;
+  titleResult: FuzzyResult;
+  score: number;
+}
 
 interface SessionListDialogProps {
   sessions: SessionInfo[];
@@ -7,21 +71,96 @@ interface SessionListDialogProps {
   onCancel: () => void;
 }
 
-export function SessionListDialog({ sessions, onSelect }: SessionListDialogProps) {
-  const options = sessions.map((s) => ({
-    name: `${s.id.slice(0, 8)}  ${s.messageCount} msgs`,
-    description: s.firstMessage.length > 60 ? s.firstMessage.slice(0, 57) + "..." : s.firstMessage,
-    value: s.path,
-  }));
+interface SearchTarget {
+  session: SessionInfo;
+  title: string;
+  searchTarget: string;
+}
+
+export function SessionListDialog({ sessions, onSelect, onCancel }: SessionListDialogProps) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const selectedIndexRef = useRef(selectedIndex);
+  selectedIndexRef.current = selectedIndex;
+  const filteredRef = useRef<FilteredSession[]>([]);
+
+  const filtered = useMemo((): FilteredSession[] => {
+    if (!searchQuery.trim()) {
+      return sessions.map((s: SessionInfo) => ({
+        session: s,
+        titleResult: null,
+        score: 0,
+      }));
+    }
+
+    const targets: SearchTarget[] = sessions.map((s: SessionInfo) => ({
+      session: s,
+      title: getDisplayTitle(s),
+      searchTarget: buildSearchTarget(s),
+    }));
+
+    const results = fuzzysort.go(searchQuery, targets, {
+      key: "searchTarget",
+      all: true,
+    });
+
+    return results.map((r) => {
+      const obj = r.obj as SearchTarget;
+      const titleResult = obj.title ? fuzzysort.single(searchQuery, obj.title) : null;
+      return {
+        session: obj.session,
+        titleResult,
+        score: r.score,
+      };
+    });
+  }, [sessions, searchQuery]);
+
+  useEffect(() => {
+    filteredRef.current = filtered;
+    setSelectedIndex(0);
+  }, [filtered]);
 
   const handleSelect = useCallback(
-    (index: number, option: { name: string; description: string; value?: string } | null) => {
-      if (option?.value) {
-        onSelect(option.value);
+    (index: number) => {
+      if (index >= 0 && index < filteredRef.current.length) {
+        onSelect(filteredRef.current[index].session.path);
       }
     },
     [onSelect],
   );
+
+  // Intercept navigation keys at the dialog level
+  useKeyboard((key) => {
+    if (key.name === "escape") {
+      key.preventDefault();
+      key.stopPropagation();
+      onCancel();
+      return;
+    }
+
+    if (key.name === "up") {
+      key.preventDefault();
+      key.stopPropagation();
+      setSelectedIndex((prev) => Math.max(0, prev - 1));
+      return;
+    }
+
+    if (key.name === "down") {
+      key.preventDefault();
+      key.stopPropagation();
+      setSelectedIndex((prev) => Math.min(filteredRef.current.length - 1, prev + 1));
+      return;
+    }
+
+    if (key.name === "return" || key.name === "enter") {
+      key.preventDefault();
+      key.stopPropagation();
+      handleSelect(selectedIndexRef.current);
+      return;
+    }
+  });
+
+  const visibleRows = filtered.length > 0 ? filtered : null;
 
   return (
     <box
@@ -40,8 +179,62 @@ export function SessionListDialog({ sessions, onSelect }: SessionListDialogProps
       <text fg="#58A6FF">
         <b>Sessions ({sessions.length})</b>
       </text>
-      <text fg="#8B949E">Select a session to resume (Esc to cancel).</text>
-      <select flexGrow={1} options={options} onSelect={handleSelect} focused={true} />
+
+      <box marginTop={1} marginBottom={1}>
+        <input
+          focused={true}
+          placeholder="Filter sessions..."
+          value={searchQuery}
+          onInput={setSearchQuery}
+        />
+      </box>
+
+      <box flexGrow={1} flexDirection="column" overflow="scroll">
+        {visibleRows ? (
+          visibleRows.map((item, idx) => {
+            const isSelected = idx === selectedIndex;
+            const displayTitle = getDisplayTitle(item.session);
+            const bgColor = isSelected ? "#1A3A5C" : "transparent";
+            const titleFg = isSelected ? "#58A6FF" : "#E6EDF3";
+
+            const highlightedTitle = item.titleResult
+              ? renderHighlighted(displayTitle, item.titleResult)
+              : displayTitle;
+
+            return (
+              <box
+                key={item.session.path}
+                backgroundColor={bgColor}
+                paddingX={1}
+                flexDirection="row"
+                justifyContent="space-between"
+              >
+                <text fg={titleFg} flexGrow={1}>
+                  {highlightedTitle}
+                </text>
+                <text fg="#8B949E">{item.session.messageCount} msgs</text>
+                <text fg="#6E7681" marginLeft={2}>
+                  {relativeTime(item.session.modified)}
+                </text>
+              </box>
+            );
+          })
+        ) : searchQuery.trim() ? (
+          <box flexGrow={1} justifyContent="center" alignItems="center">
+            <text fg="#8B949E">No sessions match &quot;{searchQuery}&quot;</text>
+          </box>
+        ) : (
+          <box flexGrow={1} justifyContent="center" alignItems="center">
+            <text fg="#8B949E">No sessions found</text>
+          </box>
+        )}
+      </box>
+
+      <text fg="#8B949E" marginTop={1}>
+        {searchQuery.trim()
+          ? "Type to filter, arrows to navigate, Enter to select, Esc to cancel."
+          : "Select a session to resume (Esc to cancel)."}
+      </text>
     </box>
   );
 }
