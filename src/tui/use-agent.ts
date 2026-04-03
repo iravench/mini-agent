@@ -34,7 +34,14 @@ function messagesToBlocks(messages: AgentMessage[]): {
       const content = (msg as any).content;
       if (Array.isArray(content)) {
         for (const part of content) {
-          if (part.type === "text" && part.text) {
+          if (part.type === "thinking" && part.thinking) {
+            blocks.push({
+              kind: "thinking",
+              message: msg,
+              text: part.thinking,
+              isStreaming: false,
+            });
+          } else if (part.type === "text" && part.text) {
             blocks.push({ kind: "assistant", message: msg, text: part.text, isStreaming: false });
           } else if (part.type === "toolCall") {
             const argsStr = JSON.stringify(part.arguments);
