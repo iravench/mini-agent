@@ -399,6 +399,24 @@ export class SessionManager {
     this.leafId = null;
   }
 
+  /**
+   * Get the session title from the header.
+   */
+  getTitle(): string | null {
+    const header = this.fileEntries.find((e): e is SessionHeader => e.type === "session");
+    return header?.title ?? null;
+  }
+
+  /**
+   * Update the session title in the header and persist to disk.
+   */
+  setTitle(title: string): void {
+    const header = this.fileEntries.find((e): e is SessionHeader => e.type === "session");
+    if (!header || !this.sessionFile) return;
+    header.title = title;
+    this._rewriteFile();
+  }
+
   // ── Internal ─────────────────────────────────────────────────────
 
   private _buildIndex(): void {

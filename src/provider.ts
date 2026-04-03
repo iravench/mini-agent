@@ -32,6 +32,14 @@ const CUSTOM_MODELS: Record<string, Model<any>> = {
     name: "Kimi K2.5",
     input: ["text", "image"],
   },
+  "moonshot:moonshot-v1-8k": {
+    ...kimiBase,
+    id: "moonshot-v1-8k",
+    name: "Moonshot V1 8K",
+    input: ["text"],
+    reasoning: false,
+    maxTokens: 8192,
+  },
 };
 
 // ── Provider/model resolution ──────────────────────────────────────────

@@ -2,6 +2,7 @@ import type { Agent, AgentEvent } from "@mariozechner/pi-agent-core";
 import type { SessionManager } from "./session.js";
 import type { UserConfig } from "./user-config.js";
 import { isRetryableError, abortableSleep, backoffDelay } from "./errors.js";
+import { generateSessionTitle } from "./lightweight-tasks.js";
 import chalk from "chalk";
 
 export interface SubscribeCoreOptions {
@@ -12,20 +13,22 @@ export interface SubscribeCoreOptions {
   quiet?: boolean;
 }
 
-/**
- * Subscribe the agent to session persistence and retry logic.
- * This is the core subscription layer -- both print and TUI modes use it.
- */
 export function subscribeCore(options: SubscribeCoreOptions): () => void {
   const { agent, session, config, quiet } = options;
   const retryEnabled = config?.retry?.enabled !== false;
   const maxRetries = config?.retry?.maxRetries ?? 3;
   let retryAttempt = 0;
+  let titleGenTriggered = false;
 
   return agent.subscribe((event: AgentEvent) => {
     switch (event.type) {
       case "message_end": {
         session.appendMessage(event.message);
+
+        if (!titleGenTriggered && event.message.role === "assistant") {
+          titleGenTriggered = true;
+          triggerTitleGeneration(session);
+        }
 
         const msg = event.message;
         if (
@@ -62,6 +65,33 @@ export function subscribeCore(options: SubscribeCoreOptions): () => void {
       }
     }
   });
+}
+
+function extractText(message: any): string {
+  if (!("content" in message) || !message.content) return "";
+  const content = message.content;
+  if (typeof content === "string") return content;
+  return content
+    .filter((b: any) => b.type === "text")
+    .map((b: any) => b.text)
+    .join(" ");
+}
+
+function triggerTitleGeneration(session: SessionManager): void {
+  if (session.getTitle()) return;
+
+  const entries = session.getEntries();
+  const firstUser = entries.find((e) => (e.message as any).role === "user");
+  const firstAssistant = entries.find((e) => (e.message as any).role === "assistant");
+
+  if (!firstUser || !firstAssistant) return;
+
+  const userText = extractText(firstUser.message);
+  const assistantText = extractText(firstAssistant.message);
+
+  if (!userText) return;
+
+  generateSessionTitle(userText, assistantText, session);
 }
 
 /**
