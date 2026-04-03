@@ -5,8 +5,6 @@ import { resolveModel } from "./provider.js";
 import type { SessionManager } from "./session.js";
 import { env } from "./config.js";
 
-const LIGHTWEIGHT_MODEL_KEY = "moonshot:moonshot-v1-8k";
-
 function getLightweightModel(): Model<Api> | null {
   try {
     return resolveModel("moonshot", "moonshot-v1-8k");
