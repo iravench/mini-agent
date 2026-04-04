@@ -129,33 +129,33 @@ export function SessionListDialog({ sessions, onSelect, onCancel }: SessionListD
     [onSelect],
   );
 
-  // Intercept navigation keys at the dialog level
   useKeyboard((key) => {
     if (key.name === "escape") {
-      key.preventDefault();
-      key.stopPropagation();
       onCancel();
       return;
     }
 
     if (key.name === "up") {
-      key.preventDefault();
-      key.stopPropagation();
       setSelectedIndex((prev) => Math.max(0, prev - 1));
       return;
     }
 
     if (key.name === "down") {
-      key.preventDefault();
-      key.stopPropagation();
       setSelectedIndex((prev) => Math.min(filteredRef.current.length - 1, prev + 1));
       return;
     }
 
     if (key.name === "return" || key.name === "enter") {
-      key.preventDefault();
-      key.stopPropagation();
       handleSelect(selectedIndexRef.current);
+      return;
+    }
+
+    if (key.name && key.name.length === 1) {
+      setSearchQuery((q) => q + key.name);
+      return;
+    }
+    if (key.name === "backspace") {
+      setSearchQuery((q) => q.slice(0, -1));
       return;
     }
   });
@@ -166,9 +166,9 @@ export function SessionListDialog({ sessions, onSelect, onCancel }: SessionListD
     <box
       position="absolute"
       left="10%"
-      top="20%"
+      top="15%"
       width="80%"
-      height="60%"
+      height="65%"
       zIndex={100}
       borderStyle="rounded"
       borderColor="#58A6FF"
@@ -177,16 +177,12 @@ export function SessionListDialog({ sessions, onSelect, onCancel }: SessionListD
       flexDirection="column"
     >
       <text fg="#58A6FF">
-        <b>Sessions ({sessions.length})</b>
+        <b>Sessions</b>
       </text>
+      <text fg="#8B949E">{sessions.length} total</text>
 
-      <box marginTop={1} marginBottom={1}>
-        <input
-          focused={true}
-          placeholder="Filter sessions..."
-          value={searchQuery}
-          onInput={setSearchQuery}
-        />
+      <box marginTop={1} marginBottom={1} borderStyle="single" borderColor="#30363D">
+        <text fg="#E6EDF3">{searchQuery || "type to filter..."}</text>
       </box>
 
       <box flexGrow={1} flexDirection="column" overflow="scroll">
@@ -232,8 +228,8 @@ export function SessionListDialog({ sessions, onSelect, onCancel }: SessionListD
 
       <text fg="#8B949E" marginTop={1}>
         {searchQuery.trim()
-          ? "Type to filter, arrows to navigate, Enter to select, Esc to cancel."
-          : "Select a session to resume (Esc to cancel)."}
+          ? "Arrows to navigate, Enter to select, Esc to cancel."
+          : "Arrows to navigate, Enter to select, Esc to cancel."}
       </text>
     </box>
   );

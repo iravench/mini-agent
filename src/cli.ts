@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { createAgent } from "./agent.js";
 import { subscribeCore, subscribeStdout } from "./subscriptions.js";
-import { resolveModel } from "./provider.js";
+import { resolveModel, getAllModels } from "./provider.js";
 import { SessionManager } from "./session.js";
 import { loadConfig } from "./user-config.js";
 import { startTUI } from "./tui/app.js";
@@ -126,6 +126,8 @@ async function main() {
     }
     await printMode(message, model, session, config);
   } else {
+    const availableModels = getAllModels();
+
     // Interactive mode -- compose core subscriptions (quiet: TUI handles rendering)
     const agent = createAgent({ model, session, config });
     subscribeCore({ agent, session, config, quiet: true });
@@ -134,9 +136,17 @@ async function main() {
       session,
       providerName: model.provider,
       modelName: model.name,
+      onExit: () => {},
       onSessionSwitch: async (sessionPath: string) => {
         const newSession = await SessionManager.open(sessionPath);
         const newAgent = createAgent({ model, session: newSession, config });
+        subscribeCore({ agent: newAgent, session: newSession, config, quiet: true });
+        return { agent: newAgent, session: newSession };
+      },
+      availableModels,
+      onModelSwitch: async (newModel: Model<Api>) => {
+        const newSession = SessionManager.create(cwd);
+        const newAgent = createAgent({ model: newModel, session: newSession, config });
         subscribeCore({ agent: newAgent, session: newSession, config, quiet: true });
         return { agent: newAgent, session: newSession };
       },

@@ -1,16 +1,24 @@
 import { createCliRenderer } from "@opentui/core";
 import { createRoot, useKeyboard, useTerminalDimensions } from "@opentui/react";
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import type { Agent } from "@mariozechner/pi-agent-core";
+import type { Model, Api } from "@mariozechner/pi-ai";
 import { SessionManager } from "../session.js";
 import type { SessionInfo } from "../session.js";
+import { list as listCommands } from "./commands/registry.js";
+import type { SlashCommand } from "./commands/types.js";
+import "./commands/session.js";
+import "./commands/model.js";
+import "./commands/new.js";
+import "./commands/quit.js";
 
 import { useAgent } from "./use-agent.js";
 import { MessageList } from "./message-list.js";
 import { Prompt } from "./prompt.js";
 import { StatusBar } from "./status-bar.js";
-import { HelpDialog } from "./help-dialog.js";
 import { SessionListDialog } from "./dialogs/session-list.js";
+import { CommandPalette } from "./command-palette.js";
+import { ModelSelector } from "./dialogs/model-selector.js";
 
 export interface SwitchResult {
   agent: Agent;
@@ -24,6 +32,8 @@ interface TUIAppProps {
   modelName: string;
   onExit: () => void;
   onSessionSwitch: (sessionPath: string) => Promise<SwitchResult>;
+  availableModels: Model<Api>[];
+  onModelSwitch: (model: Model<Api>) => Promise<SwitchResult>;
 }
 
 function TUIApp({
@@ -33,31 +43,37 @@ function TUIApp({
   modelName,
   onExit,
   onSessionSwitch,
+  availableModels,
+  onModelSwitch,
 }: TUIAppProps) {
   const { width, height } = useTerminalDimensions();
 
-  // Agent + session state (swappable via F2)
   const [agent, setAgent] = useState(initialAgent);
   const [session, setSession] = useState(initialSession);
+  const [currentProvider, setCurrentProvider] = useState(providerName);
+  const [currentModel, setCurrentModel] = useState(modelName);
 
   const { state, sendPrompt, abort } = useAgent({
     agent,
     sessionId: session.getSessionId(),
-    providerName,
-    modelName,
+    providerName: currentProvider,
+    modelName: currentModel,
   });
 
-  const [showHelp, setShowHelp] = useState(false);
+  // Dialog states
   const [showSessions, setShowSessions] = useState(false);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [paletteQuery, setPaletteQuery] = useState("");
+  const [showModelSelector, setShowModelSelector] = useState(false);
 
-  const promptFocused = !showHelp && !showSessions;
+  const promptFocused = !showSessions && !showCommandPalette && !showModelSelector;
 
-  // Layout: status bar (1) + prompt (5) + messages (rest)
   const statusBarHeight = 1;
   const promptHeight = 5;
   const messageHeight = Math.max(1, height - statusBarHeight - promptHeight);
 
+  // ── Session list ────────────────────────────────────────────────
   const handleSessionSelect = useCallback(
     async (sessionPath: string) => {
       setShowSessions(false);
@@ -66,7 +82,7 @@ function TUIApp({
         setAgent(result.agent);
         setSession(result.session);
       } catch {
-        // Session switch failed -- stay on current session
+        // Stay on current session
       }
     },
     [onSessionSwitch],
@@ -76,32 +92,95 @@ function TUIApp({
     setShowSessions(false);
   }, []);
 
-  const toggleSessions = useCallback(() => {
-    if (showSessions) {
-      setShowSessions(false);
-    } else {
-      SessionManager.list(session.getCwd()).then(
-        (s) => {
-          setSessions(s);
-          setShowSessions(true);
-        },
-        () => {
-          setSessions([]);
-          setShowSessions(true);
-        },
-      );
+  const openSessions = useCallback(() => {
+    SessionManager.list(session.getCwd()).then(
+      (s) => {
+        setSessions(s);
+        setShowSessions(true);
+      },
+      () => {
+        setSessions([]);
+        setShowSessions(true);
+      },
+    );
+  }, [session]);
+
+  // ── Command palette ─────────────────────────────────────────────
+  const closePalette = useCallback(() => {
+    setShowCommandPalette(false);
+    setPaletteQuery("");
+  }, []);
+
+  const handleCommandSelect = useCallback(
+    (cmd: SlashCommand) => {
+      closePalette();
+      cmd.handler({ closePalette });
+    },
+    [closePalette],
+  );
+
+  // ── Model selector ──────────────────────────────────────────────
+  const handleModelSelect = useCallback(
+    async (model: Model<Api>) => {
+      setShowModelSelector(false);
+      try {
+        const result = await onModelSwitch(model);
+        setAgent(result.agent);
+        setSession(result.session);
+        setCurrentProvider(model.provider);
+        setCurrentModel(model.name || model.id);
+      } catch {
+        // Stay on current model
+      }
+    },
+    [onModelSwitch],
+  );
+
+  const handleModelCancel = useCallback(() => {
+    setShowModelSelector(false);
+  }, []);
+
+  // ── Register command handlers ───────────────────────────────────
+  const openSessionsRef = useRef(openSessions);
+  openSessionsRef.current = openSessions;
+
+  const setShowModelSelectorRef = useRef(setShowModelSelector);
+  setShowModelSelectorRef.current = setShowModelSelector;
+
+  const onExitRef = useRef(onExit);
+  onExitRef.current = onExit;
+
+  useEffect(() => {
+    const commands = listCommands();
+    for (const cmd of commands) {
+      const originalHandler = cmd.handler;
+      cmd.handler = (ctx) => {
+        switch (cmd.id) {
+          case "session":
+            openSessionsRef.current();
+            break;
+          case "model":
+            setShowModelSelectorRef.current(true);
+            break;
+          case "new":
+            session.newSession();
+            setAgent(initialAgent);
+            setSession(session);
+            break;
+          case "quit":
+            onExitRef.current();
+            break;
+          default:
+            originalHandler(ctx);
+        }
+      };
     }
-  }, [showSessions, session]);
+  }, [session, initialAgent]);
 
-  // All keyboard shortcuts in one place
-  const toggleSessionsRef = useRef(toggleSessions);
-  toggleSessionsRef.current = toggleSessions;
-
+  // ── Global keyboard shortcuts ───────────────────────────────────
   useKeyboard((key) => {
     // Ctrl+C: abort if generating, else exit
     if (key.name === "c" && key.ctrl) {
-      key.preventDefault();
-      key.stopPropagation();
       if (state.isGenerating) {
         abort();
       } else {
@@ -110,28 +189,22 @@ function TUIApp({
       return;
     }
 
-    // F1: toggle help
-    if (key.name === "f1") {
-      key.preventDefault();
-      key.stopPropagation();
-      setShowHelp((h) => !h);
-      return;
-    }
-
-    // F2: toggle session list
-    if (key.name === "f2") {
-      key.preventDefault();
-      key.stopPropagation();
-      toggleSessionsRef.current();
+    // Ctrl+P: toggle command palette
+    if (key.name === "p" && key.ctrl) {
+      if (showCommandPalette) {
+        closePalette();
+      } else {
+        setPaletteQuery("");
+        setShowCommandPalette(true);
+      }
       return;
     }
 
     // Esc: close any open dialog
     if (key.name === "escape") {
-      key.preventDefault();
-      key.stopPropagation();
-      if (showHelp) setShowHelp(false);
       if (showSessions) setShowSessions(false);
+      if (showCommandPalette) closePalette();
+      if (showModelSelector) setShowModelSelector(false);
       return;
     }
   });
@@ -156,12 +229,29 @@ function TUIApp({
         isGenerating={state.isGenerating}
         focused={promptFocused}
       />
-      {showHelp && <HelpDialog onClose={() => setShowHelp(false)} />}
+
       {showSessions && (
         <SessionListDialog
           sessions={sessions}
           onSelect={handleSessionSelect}
           onCancel={handleSessionCancel}
+        />
+      )}
+      {showCommandPalette && (
+        <CommandPalette
+          initialQuery={paletteQuery}
+          commands={listCommands()}
+          onSelect={handleCommandSelect}
+          onCancel={closePalette}
+        />
+      )}
+      {showModelSelector && (
+        <ModelSelector
+          models={availableModels}
+          currentModelId={currentModel}
+          currentProvider={currentProvider}
+          onSelect={handleModelSelect}
+          onCancel={handleModelCancel}
         />
       )}
     </box>
@@ -173,7 +263,10 @@ export interface StartTUIOptions {
   session: SessionManager;
   providerName: string;
   modelName: string;
+  onExit: () => void;
   onSessionSwitch: (sessionPath: string) => Promise<SwitchResult>;
+  availableModels: Model<Api>[];
+  onModelSwitch: (model: Model<Api>) => Promise<SwitchResult>;
 }
 
 export async function startTUI(options: StartTUIOptions) {
@@ -200,13 +293,8 @@ export async function startTUI(options: StartTUIOptions) {
       modelName={options.modelName}
       onExit={exit}
       onSessionSwitch={options.onSessionSwitch}
+      availableModels={options.availableModels}
+      onModelSwitch={options.onModelSwitch}
     />,
   );
-
-  // Ensure clean shutdown
-  process.on("exit", exit);
-  process.on("SIGTERM", () => {
-    exit();
-    process.exit(0);
-  });
 }

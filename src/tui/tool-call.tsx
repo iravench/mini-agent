@@ -22,10 +22,16 @@ export function ToolCallBlock({ block }: { block: ToolCallBlockType }) {
     <box padding={1} paddingTop={0} paddingBottom={0} flexDirection="column">
       <text>
         <span fg={color}>{label} </span>
-        <b fg="#D2A8FF">{block.toolName}</b>
+        <span fg="#D2A8FF">
+          <b>{block.toolName}</b>
+        </span>
         <span fg="#8B949E">({block.args})</span>
       </text>
-      {block.result && <text fg={block.isError ? "#F85149" : "#8B949E"}>{block.result}</text>}
+      {block.result && (
+        <text>
+          <span fg={block.isError ? "#F85149" : "#8B949E"}>{block.result}</span>
+        </text>
+      )}
     </box>
   );
 }

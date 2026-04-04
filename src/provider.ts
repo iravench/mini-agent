@@ -88,3 +88,21 @@ export function resolveModel(providerName?: string, modelId?: string): Model<Api
 
   throw new Error(`Failed to resolve AI model.\n${hint}`);
 }
+
+// ── Collect all available models (built-in + custom) ─────────────────
+
+export function getAllModels(): Model<Api>[] {
+  const models: Model<Api>[] = [];
+  const knownProviders = getProviders();
+
+  for (const provider of knownProviders) {
+    const providerModels = getModels(provider as KnownProvider);
+    models.push(...providerModels);
+  }
+
+  for (const model of Object.values(CUSTOM_MODELS)) {
+    models.push(model as Model<Api>);
+  }
+
+  return models;
+}
