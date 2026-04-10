@@ -26,13 +26,12 @@ bun src/cli.ts --provider moonshot --model kimi-k2.5
 
 ### Keyboard shortcuts (TUI)
 
-| Key    | Action         |
-| ------ | -------------- |
-| Enter  | Submit message |
-| Ctrl+C | Abort / Exit   |
-| F1     | Toggle help    |
-| F2     | Session list   |
-| Esc    | Close dialogs  |
+| Key    | Action          |
+| ------ | --------------- |
+| Enter  | Submit message  |
+| Ctrl+C | Abort / Exit    |
+| Ctrl+P | Command palette |
+| Esc    | Close dialogs   |
 
 ## Tools
 

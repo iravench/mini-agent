@@ -15,24 +15,24 @@
     "check": "tsc --noEmit && eslint src/ tests/ && prettier --check src/ tests/"
   },
   "dependencies": {
-    "@mariozechner/pi-agent-core": "^0.64.0",
-    "@mariozechner/pi-ai": "^0.64.0",
-    "@opentui/core": "^0.1.95",
-    "@opentui/react": "^0.1.95",
-    "chalk": "^5.4.1",
+    "@mariozechner/pi-agent-core": "^0.66.1",
+    "@mariozechner/pi-ai": "^0.66.1",
+    "@opentui/core": "^0.1.97",
+    "@opentui/react": "^0.1.97",
+    "chalk": "^5.6.2",
     "fuzzysort": "^3.1.0",
-    "react": "^19.2.4",
+    "react": "^19.2.5",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^25.5.0",
+    "@types/node": "^25.6.0",
     "@types/react": "^19.2.14",
-    "eslint": "^10.1.0",
-    "prettier": "^3.8.1",
+    "eslint": "^10.2.0",
+    "prettier": "^3.8.2",
     "typescript": "^6.0.2",
-    "typescript-eslint": "^8.57.2",
-    "vitest": "^4.1.2"
+    "typescript-eslint": "^8.58.1",
+    "vitest": "^4.1.4"
   },
   "overrides": {
     "safe-buffer": "npm:@socketregistry/safe-buffer@^1"
